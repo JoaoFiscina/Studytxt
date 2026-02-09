@@ -754,17 +754,12 @@ editor.addEventListener("mouseup", captureSelectionIfInsideEditor);
 editor.addEventListener("keyup", captureSelectionIfInsideEditor);
 document.addEventListener("selectionchange", captureSelectionIfInsideEditor);
 
-const topbar = document.querySelector(".topbar");
-if (topbar) {
-  const preventFocusLoss = (e) => {
-    const button = e.target.closest("button");
-    if (!button) return;
+document.querySelectorAll("button, label.toggle").forEach((el) => {
+  el.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     restoreSelection();
-  };
-  topbar.addEventListener("pointerdown", preventFocusLoss);
-  topbar.addEventListener("mousedown", preventFocusLoss);
-}
+  });
+});
 
 // ---------- Export / Import ----------
 function downloadFile(filename, content, mime) {
