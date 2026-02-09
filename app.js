@@ -43,6 +43,7 @@ let state = {
 
 let pendingNoteAnchor = null; // {anchorType, anchorId, excerpt}
 let autosaveTimer = null;
+let lastSelectionRange = null;
 
 // ---------- Utils ----------
 function uuid() {
@@ -59,14 +60,48 @@ function escapeForTextExport(s) {
 }
 
 function normalizePastedText(raw) {
-  // 1) padroniza newlines
-  let text = (raw || "").replace(/\r\n/g, "\n");
+  const text = (raw || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
 
-  // 2) blocos por linhas em branco (parágrafos)
-  const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+  const lines = text.split("\n").map(line => line.replace(/\s+$/g, ""));
+  const hasBlankLines = lines.some(line => line.trim() === "");
+  const nonEmptyLines = lines.filter(line => line.trim() !== "");
+  const shouldSplitAllLines = !hasBlankLines && nonEmptyLines.length >= 4;
+  const listPattern = /^\s*(?:[-•]\s+|\d+[.)]\s+)/;
 
-  // 3) em cada bloco, quebra simples vira espaço (bom p/ PDF)
-  return blocks.map(b => b.replace(/\n+/g, " ").replace(/\s+/g, " ").trim());
+  if (shouldSplitAllLines) {
+    return nonEmptyLines.map(line => line.replace(/\s+/g, " ").trim());
+  }
+
+  const paragraphs = [];
+  let buffer = [];
+
+  const flushBuffer = () => {
+    if (!buffer.length) return;
+    const joined = buffer.join(" ").replace(/\s+/g, " ").trim();
+    if (joined) paragraphs.push(joined);
+    buffer = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushBuffer();
+      return;
+    }
+
+    if (listPattern.test(trimmed)) {
+      flushBuffer();
+      paragraphs.push(trimmed.replace(/\s+/g, " "));
+      return;
+    }
+
+    buffer.push(trimmed);
+  });
+
+  flushBuffer();
+  return paragraphs;
 }
 
 function placeCaretAfter(node) {
@@ -82,6 +117,23 @@ function getSelectionRange() {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return null;
   return sel.getRangeAt(0);
+}
+
+function captureSelectionIfInsideEditor() {
+  const range = getSelectionRange();
+  if (!range) return;
+  if (!editor.contains(range.commonAncestorContainer)) return;
+  lastSelectionRange = range.cloneRange();
+}
+
+function restoreSelection() {
+  if (!lastSelectionRange) return false;
+  if (!editor.contains(lastSelectionRange.commonAncestorContainer)) return false;
+  const sel = window.getSelection();
+  if (!sel) return false;
+  sel.removeAllRanges();
+  sel.addRange(lastSelectionRange);
+  return true;
 }
 
 function findClosest(el, selector) {
@@ -150,6 +202,7 @@ function wrapRangeWithElement(range, el) {
 
 function applyHighlight(catId) {
   clearSearchHighlights();
+  restoreSelection();
   const cat = HLCATS.find(c => c.id === catId);
   if (!cat) return;
 
@@ -241,6 +294,7 @@ function getHighlightUnderCursorOrSelection() {
 
 function addNoteFlow() {
   clearSearchHighlights();
+  restoreSelection();
 
   // prioridade 1: nota ligada a grifo sob cursor
   const hl = getHighlightUnderCursorOrSelection();
@@ -365,6 +419,7 @@ function renderNotes() {
 // ---------- Sections ----------
 function createSectionFromSelection() {
   clearSearchHighlights();
+  restoreSelection();
 
   const range = getSelectionRange();
   if (!range || range.collapsed) {
@@ -619,6 +674,21 @@ $("btnNew").addEventListener("click", () => {
 // autosave em mudanças
 editor.addEventListener("input", () => scheduleAutosave());
 docTitle.addEventListener("input", () => scheduleAutosave());
+editor.addEventListener("mouseup", captureSelectionIfInsideEditor);
+editor.addEventListener("keyup", captureSelectionIfInsideEditor);
+document.addEventListener("selectionchange", captureSelectionIfInsideEditor);
+
+const topbar = document.querySelector(".topbar");
+if (topbar) {
+  const preventFocusLoss = (e) => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    e.preventDefault();
+    restoreSelection();
+  };
+  topbar.addEventListener("pointerdown", preventFocusLoss);
+  topbar.addEventListener("mousedown", preventFocusLoss);
+}
 
 // ---------- Export / Import ----------
 function downloadFile(filename, content, mime) {
