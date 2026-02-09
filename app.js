@@ -21,6 +21,7 @@ const noteDialogSubtitle = $("noteDialogSubtitle");
 const noteText = $("noteText");
 const btnConfirmNote = $("btnConfirmNote");
 const btnClean = $("btnClean");
+const btnExportPdf = $("btnExportPdf");
 
 const fileImportJson = $("fileImportJson");
 
@@ -71,6 +72,16 @@ function isSafeUrl(href) {
   }
 }
 
+function isSafeLinkHref(href) {
+  if (!href) return false;
+  try {
+    const url = new URL(href, window.location.href);
+    return ["http:", "https:", "mailto:"].includes(url.protocol);
+  } catch (err) {
+    return false;
+  }
+}
+
 function isSafeImgSrc(src) {
   if (!src) return false;
   if (src.startsWith("data:image/")) return true;
@@ -82,7 +93,7 @@ function isSafeImgSrc(src) {
   }
 }
 
-function normalizePastedText(raw) {
+function parsePlainTextToBlocks(raw) {
   const text = (raw || "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");
@@ -90,41 +101,205 @@ function normalizePastedText(raw) {
   const lines = text.split("\n").map(line => line.replace(/\s+$/g, ""));
   const hasBlankLines = lines.some(line => line.trim() === "");
   const nonEmptyLines = lines.filter(line => line.trim() !== "");
-  const shouldSplitAllLines = !hasBlankLines && nonEmptyLines.length >= 4;
   const listPattern = /^\s*(?:[-•]\s+|\d+[.)]\s+)/;
+  const hasListLines = nonEmptyLines.some(line => listPattern.test(line));
+  const shouldSplitAllLines = !hasBlankLines && nonEmptyLines.length >= 4 && !hasListLines;
 
   if (shouldSplitAllLines) {
-    return nonEmptyLines.map(line => line.replace(/\s+/g, " ").trim());
+    return nonEmptyLines.map(line => ({
+      type: "p",
+      text: line.replace(/\s+/g, " ").trim(),
+    }));
   }
 
-  const paragraphs = [];
-  let buffer = [];
+  const blocks = [];
+  const paragraphBuffer = [];
+  let listItems = [];
+  let listType = null;
 
-  const flushBuffer = () => {
-    if (!buffer.length) return;
-    const joined = buffer.join(" ").replace(/\s+/g, " ").trim();
-    if (joined) paragraphs.push(joined);
-    buffer = [];
+  const flushParagraph = () => {
+    if (!paragraphBuffer.length) return;
+    const textValue = paragraphBuffer.join(" ").replace(/\s+/g, " ").trim();
+    if (textValue) blocks.push({ type: "p", text: textValue });
+    paragraphBuffer.length = 0;
+  };
+
+  const flushList = () => {
+    if (!listItems.length || !listType) return;
+    blocks.push({ type: listType, items: listItems.slice() });
+    listItems = [];
+    listType = null;
   };
 
   lines.forEach((line) => {
     const trimmed = line.trim();
     if (!trimmed) {
-      flushBuffer();
+      flushParagraph();
+      flushList();
       return;
     }
 
-    if (listPattern.test(trimmed)) {
-      flushBuffer();
-      paragraphs.push(trimmed.replace(/\s+/g, " "));
+    const bulletMatch = trimmed.match(/^\s*[-•]\s+(.*)$/);
+    const orderedMatch = trimmed.match(/^\s*\d+[.)]\s+(.*)$/);
+
+    if (bulletMatch || orderedMatch) {
+      flushParagraph();
+      const nextType = bulletMatch ? "ul" : "ol";
+      if (listType && listType !== nextType) flushList();
+      listType = nextType;
+      const itemText = (bulletMatch ? bulletMatch[1] : orderedMatch[1]).replace(/\s+/g, " ").trim();
+      if (itemText) listItems.push(itemText);
       return;
     }
 
-    buffer.push(trimmed);
+    flushList();
+    paragraphBuffer.push(trimmed);
   });
 
-  flushBuffer();
-  return paragraphs;
+  flushParagraph();
+  flushList();
+
+  return blocks;
+}
+
+function buildFragmentFromBlocks(blocks) {
+  const frag = document.createDocumentFragment();
+
+  blocks.forEach((block) => {
+    if (block.type === "p") {
+      const p = document.createElement("p");
+      p.textContent = block.text;
+      frag.appendChild(p);
+      return;
+    }
+
+    if (block.type === "ul" || block.type === "ol") {
+      const list = document.createElement(block.type);
+      block.items.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        list.appendChild(li);
+      });
+      frag.appendChild(list);
+    }
+  });
+
+  return frag;
+}
+
+function wrapLooseTextNodes(container) {
+  const nodes = Array.from(container.childNodes);
+  nodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) {
+        node.remove();
+        return;
+      }
+      const p = document.createElement("p");
+      p.textContent = text;
+      container.replaceChild(p, node);
+    }
+  });
+}
+
+function sanitizeHTMLToFragment(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+
+  const blockedTags = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META"]);
+  const allowedTags = new Set([
+    "P", "BR", "STRONG", "B", "EM", "I", "U",
+    "H1", "H2", "H3", "H4",
+    "UL", "OL", "LI",
+    "BLOCKQUOTE", "PRE", "CODE",
+    "TABLE", "THEAD", "TBODY", "TR", "TH", "TD",
+    "IMG", "A", "HR", "DIV", "SPAN",
+    "DETAILS", "SUMMARY",
+  ]);
+
+  const unwrap = (el) => {
+    const parent = el.parentNode;
+    if (!parent) return;
+    while (el.firstChild) parent.insertBefore(el.firstChild, el);
+    parent.removeChild(el);
+  };
+
+  const elements = [];
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT);
+  while (walker.nextNode()) elements.push(walker.currentNode);
+
+  elements.forEach((el) => {
+    const tag = el.tagName;
+    if (blockedTags.has(tag)) {
+      el.remove();
+      return;
+    }
+
+    if (!allowedTags.has(tag)) {
+      unwrap(el);
+      return;
+    }
+
+    Array.from(el.attributes).forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith("on") || name === "style" || name === "class") {
+        el.removeAttribute(attr.name);
+      }
+    });
+
+    if (tag === "A") {
+      const href = (el.getAttribute("href") || "").trim();
+      if (!isSafeLinkHref(href)) {
+        el.removeAttribute("href");
+      } else {
+        el.setAttribute("href", href);
+      }
+      if (el.hasAttribute("title")) {
+        el.setAttribute("title", el.getAttribute("title"));
+      }
+      el.setAttribute("target", "_blank");
+      el.setAttribute("rel", "noopener noreferrer");
+      Array.from(el.attributes).forEach((attr) => {
+        if (!["href", "title", "target", "rel"].includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    } else if (tag === "IMG") {
+      const src = (el.getAttribute("src") || "").trim();
+      if (!isSafeImgSrc(src)) {
+        el.remove();
+        return;
+      }
+      el.setAttribute("src", src);
+      Array.from(el.attributes).forEach((attr) => {
+        if (!["src", "alt", "title"].includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    } else if (tag === "TH" || tag === "TD") {
+      Array.from(el.attributes).forEach((attr) => {
+        if (!["colspan", "rowspan"].includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    } else if (tag === "DETAILS") {
+      Array.from(el.attributes).forEach((attr) => {
+        if (!["open"].includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    } else {
+      Array.from(el.attributes).forEach((attr) => {
+        if (!["colspan", "rowspan"].includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    }
+  });
+
+  wrapLooseTextNodes(template.content);
+  return template.content;
 }
 
 function placeCaretAfter(node) {
@@ -233,34 +408,37 @@ function cleanFormatting() {
   scheduleAutosave("Formatação limpa.");
 }
 
-// ---------- Paste handling (texto puro) ----------
+function insertFragmentAtRange(fragment, range) {
+  if (!range) return;
+  range.deleteContents();
+  const marker = document.createElement("span");
+  marker.setAttribute("data-caret", "1");
+  fragment.appendChild(marker);
+  range.insertNode(fragment);
+  placeCaretAfter(marker);
+  marker.remove();
+}
+
+// ---------- Paste handling ----------
 editor.addEventListener("paste", (e) => {
   e.preventDefault();
-  const text = (e.clipboardData || window.clipboardData).getData("text/plain");
-  const blocks = normalizePastedText(text);
-
   const range = getSelectionRange();
   if (!range) return;
 
-  // remove seleção atual
-  range.deleteContents();
+  const clipboard = e.clipboardData || window.clipboardData;
+  const html = clipboard.getData("text/html");
+  const text = clipboard.getData("text/plain");
 
-  const marker = document.createElement("span");
-  marker.setAttribute("data-caret", "1");
+  if (html) {
+    const fragment = sanitizeHTMLToFragment(html);
+    insertFragmentAtRange(fragment, range);
+    scheduleAutosave("Colado com formatação.");
+    return;
+  }
 
-  const frag = document.createDocumentFragment();
-  blocks.forEach((b) => {
-    const p = document.createElement("p");
-    p.textContent = b;
-    frag.appendChild(p);
-  });
-
-  frag.appendChild(marker);
-  range.insertNode(frag);
-
-  placeCaretAfter(marker);
-  marker.remove();
-
+  const blocks = parsePlainTextToBlocks(text);
+  const frag = buildFragmentFromBlocks(blocks);
+  insertFragmentAtRange(frag, range);
   scheduleAutosave("Colado e formatado.");
 });
 
@@ -610,6 +788,12 @@ $("btnAutoSections").addEventListener("click", autoSections);
 
 if (btnClean) {
   btnClean.addEventListener("click", cleanFormatting);
+}
+
+if (btnExportPdf) {
+  btnExportPdf.addEventListener("click", () => {
+    window.print();
+  });
 }
 
 // ---------- Search ----------
