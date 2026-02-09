@@ -406,3 +406,36 @@ mark.hl-5{ background: #e9d8fd; }
     width: 100%;
   }
 }
+
+@media print{
+  @page{
+    margin: 14mm;
+  }
+
+  body{
+    background: #ffffff;
+  }
+
+  .topbar,
+  .notesPanel,
+  .statusbar,
+  .paper__hint{
+    display: none !important;
+  }
+
+  .main{
+    display: block;
+    padding: 0;
+  }
+
+  .paper{
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    max-width: none;
+  }
+
+  .editor{
+    min-height: auto;
+  }
+}
