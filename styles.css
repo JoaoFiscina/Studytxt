@@ -1,0 +1,350 @@
+:root{
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --shadow: 0 10px 25px rgba(0,0,0,.06);
+
+  --radius: 14px;
+  --paper-width: 860px;
+
+  --ui-font: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --read-font: "Source Serif 4", Georgia, "Times New Roman", serif;
+}
+
+*{ box-sizing: border-box; }
+html, body{ height: 100%; }
+body{
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui-font);
+}
+
+#app{
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(246,247,249,.9);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.topbar__left, .topbar__center, .topbar__right{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar__center{
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.topbar__right{
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.docTitle{
+  width: min(420px, 45vw);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  outline: none;
+  font-size: 14px;
+}
+
+.btn{
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  box-shadow: 0 1px 0 rgba(0,0,0,.02);
+}
+
+.btn:hover{ filter: brightness(.98); }
+.btn:active{ transform: translateY(1px); }
+
+.btn--ghost{
+  background: transparent;
+}
+
+.hlBar{
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.hlBtn{
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.tools{
+  display: flex;
+  gap: 8px;
+}
+
+.search{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.search__input{
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 240px;
+  font-size: 13px;
+}
+
+.main{
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  padding: 14px;
+  align-items: start;
+  flex: 1;
+}
+
+.paper{
+  width: 100%;
+  max-width: var(--paper-width);
+  margin: 0 auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 18px 26px;
+}
+
+.paper__hint{
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.editor{
+  font-family: var(--read-font);
+  font-size: 18px;
+  line-height: 1.75;
+  outline: none;
+  min-height: 65vh;
+  white-space: normal;
+}
+
+.editor p{
+  margin: 0 0 14px 0;
+}
+
+.editor h2{
+  font-family: var(--ui-font);
+  font-size: 16px;
+  letter-spacing: .2px;
+  margin: 22px 0 10px;
+  color: #111827;
+}
+
+.editor details.section{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 14px 0;
+  background: #ffffff;
+}
+
+.editor details.section > summary{
+  cursor: pointer;
+  font-family: var(--ui-font);
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+}
+
+.editor details.section > summary:focus{
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, .08);
+  border-radius: 10px;
+}
+
+.note-anchor{
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+mark{
+  padding: 0 .08em;
+  border-radius: 6px;
+}
+
+/* Highlights (cores suaves) */
+mark.hl-1{ background: #fff3b0; }
+mark.hl-2{ background: #caffbf; }
+mark.hl-3{ background: #bde0fe; }
+mark.hl-4{ background: #ffd6a5; }
+mark.hl-5{ background: #e9d8fd; }
+
+.search-hit{
+  background: #fde68a;
+  border-radius: 6px;
+  padding: 0 .08em;
+}
+
+.notesPanel{
+  width: 360px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: sticky;
+  top: 72px;
+  align-self: start;
+  max-height: calc(100vh - 90px);
+  display: flex;
+  flex-direction: column;
+}
+
+.notesPanel.is-collapsed{
+  width: 56px;
+}
+
+.notesPanel__header{
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notesPanel__title{
+  font-weight: 600;
+}
+
+.notesPanel.is-collapsed .notesPanel__title{
+  display: none;
+}
+
+.notesList{
+  padding: 10px;
+  overflow: auto;
+}
+
+.notesPanel.is-collapsed .notesList{
+  display: none;
+}
+
+.noteCard{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.noteCard__meta{
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.noteCard__text{
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.statusbar{
+  border-top: 1px solid var(--border);
+  padding: 8px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dialog{
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0;
+  max-width: 620px;
+  width: calc(100vw - 24px);
+}
+
+.dialog__content{
+  padding: 14px;
+}
+
+.dialog__title{
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.dialog__subtitle{
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dialog__textarea{
+  width: 100%;
+  min-height: 160px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-family: var(--ui-font);
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+}
+
+.dialog__actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 1100px){
+  .main{
+    grid-template-columns: 1fr;
+  }
+  .notesPanel{
+    position: relative;
+    top: 0;
+    width: 100%;
+    max-height: none;
+  }
+  .notesPanel.is-collapsed{
+    width: 100%;
+  }
+}
+
