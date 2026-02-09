@@ -161,10 +161,14 @@ body{
   outline: none;
   min-height: 65vh;
   white-space: normal;
+  text-align: left;
+  text-justify: auto;
+  hyphens: none;
 }
 
 .editor p{
   margin: 0 0 14px 0;
+  text-align: left;
 }
 
 .editor h2{
@@ -347,4 +351,3 @@ mark.hl-5{ background: #e9d8fd; }
     width: 100%;
   }
 }
-
