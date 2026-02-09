@@ -171,6 +171,61 @@ body{
   text-align: left;
 }
 
+/* Garante que não fica “justificado” */
+.editor, .editor p, .editor li, .editor table{
+  text-align: left;
+  hyphens: none;
+}
+
+/* Listas */
+.editor ul, .editor ol{
+  margin: 0 0 14px 1.25rem;
+  padding: 0 0 0 1rem;
+}
+.editor li{ margin: 6px 0; }
+
+/* Tabelas */
+.editor table{
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-family: var(--ui-font);
+  font-size: 14px;
+}
+.editor th, .editor td{
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  vertical-align: top;
+}
+.editor th{
+  background: #f9fafb;
+  font-weight: 600;
+}
+
+/* Imagens */
+.editor img{
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 12px auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+/* Toggle simples */
+.toggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 13px;
+  user-select: none;
+}
+.toggle input{ transform: translateY(1px); }
+
 .editor h2{
   font-family: var(--ui-font);
   font-size: 16px;
