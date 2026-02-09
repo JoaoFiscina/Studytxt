@@ -20,6 +20,7 @@ const noteDialog = $("noteDialog");
 const noteDialogSubtitle = $("noteDialogSubtitle");
 const noteText = $("noteText");
 const btnConfirmNote = $("btnConfirmNote");
+const btnClean = $("btnClean");
 
 const fileImportJson = $("fileImportJson");
 
@@ -57,6 +58,28 @@ function setStatus(msg) {
 
 function escapeForTextExport(s) {
   return (s || "").replace(/\r/g, "");
+}
+
+function isSafeUrl(href) {
+  if (!href) return false;
+  if (href.startsWith("#")) return true;
+  try {
+    const url = new URL(href, window.location.href);
+    return ["http:", "https:", "mailto:", "tel:"].includes(url.protocol);
+  } catch (err) {
+    return false;
+  }
+}
+
+function isSafeImgSrc(src) {
+  if (!src) return false;
+  if (src.startsWith("data:image/")) return true;
+  try {
+    const url = new URL(src, window.location.href);
+    return ["http:", "https:"].includes(url.protocol);
+  } catch (err) {
+    return false;
+  }
 }
 
 function normalizePastedText(raw) {
@@ -159,6 +182,55 @@ function clearSearchHighlights() {
     parent.removeChild(span);
     parent.normalize();
   });
+}
+
+function cleanFormatting() {
+  clearSearchHighlights();
+
+  const keepClass = new Set([
+    "hl-1",
+    "hl-2",
+    "hl-3",
+    "hl-4",
+    "hl-5",
+    "note-anchor",
+    "section",
+    "search-hit",
+  ]);
+
+  const all = Array.from(editor.querySelectorAll("*"));
+  for (const el of all) {
+    el.removeAttribute("style");
+
+    if (el.classList && el.classList.length) {
+      const keep = Array.from(el.classList).filter(c => keepClass.has(c));
+      el.className = keep.join(" ");
+      if (!el.className) el.removeAttribute("class");
+    }
+
+    ["align", "width", "height", "color", "bgcolor"].forEach(a => el.removeAttribute(a));
+
+    if (el.tagName === "A") {
+      const href = (el.getAttribute("href") || "").trim();
+      if (!isSafeUrl(href)) el.removeAttribute("href");
+      el.setAttribute("target", "_blank");
+      el.setAttribute("rel", "noopener noreferrer");
+    }
+
+    if (el.tagName === "IMG") {
+      const src = (el.getAttribute("src") || "").trim();
+      if (!isSafeImgSrc(src)) el.remove();
+    }
+
+    if (el.tagName === "SPAN" && !el.className && el.attributes.length === 0) {
+      const parent = el.parentNode;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+    }
+  }
+
+  editor.normalize();
+  scheduleAutosave("Formatação limpa.");
 }
 
 // ---------- Paste handling (texto puro) ----------
@@ -535,6 +607,10 @@ function autoSections() {
 }
 
 $("btnAutoSections").addEventListener("click", autoSections);
+
+if (btnClean) {
+  btnClean.addEventListener("click", cleanFormatting);
+}
 
 // ---------- Search ----------
 $("searchInput").addEventListener("input", () => {
