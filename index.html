@@ -1,11 +1,99 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <title>StudyTXT</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Reader + Grifos</title>
+
+  <!-- Fontes (opcional). Se quiser 100% offline, você pode remover isso e usar só system fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <h1>StudyTXT</h1>
-    <p>Meu site no GitHub Pages está funcionando.</p>
+  <div id="app">
+    <header class="topbar">
+      <div class="topbar__left">
+        <input id="docTitle" class="docTitle" placeholder="Título do documento (opcional)" />
+        <button id="btnNew" class="btn">Novo</button>
+        <button id="btnSave" class="btn">Salvar</button>
+      </div>
+
+      <div class="topbar__center">
+        <div class="hlBar" aria-label="Grifos">
+          <button class="hlBtn hlBtn--1" data-cat="1" title="Definição (Ctrl+1)">1</button>
+          <button class="hlBtn hlBtn--2" data-cat="2" title="Conduta (Ctrl+2)">2</button>
+          <button class="hlBtn hlBtn--3" data-cat="3" title="Diagnóstico (Ctrl+3)">3</button>
+          <button class="hlBtn hlBtn--4" data-cat="4" title="DDx/Armadilhas (Ctrl+4)">4</button>
+          <button class="hlBtn hlBtn--5" data-cat="5" title="Evidência/Pérolas (Ctrl+5)">5</button>
+        </div>
+
+        <div class="tools">
+          <button id="btnNote" class="btn">Nota</button>
+          <button id="btnSection" class="btn">Criar seção</button>
+          <button id="btnAutoSections" class="btn">Auto-seções</button>
+        </div>
+      </div>
+
+      <div class="topbar__right">
+        <div class="search">
+          <input id="searchInput" class="search__input" placeholder="Buscar no texto (Ctrl+K)" />
+          <button id="btnClearSearch" class="btn btn--ghost" title="Limpar busca">✕</button>
+        </div>
+        <button id="btnToggleNotes" class="btn">Notas</button>
+
+        <div class="menu">
+          <button id="btnExportTxt" class="btn btn--ghost" title="Exportar TXT (Ctrl+Shift+E)">TXT</button>
+          <button id="btnExportJson" class="btn btn--ghost" title="Exportar JSON (Ctrl+Shift+J)">JSON</button>
+          <label class="btn btn--ghost" title="Importar JSON (Ctrl+Shift+I)">
+            Importar
+            <input id="fileImportJson" type="file" accept=".json,application/json" hidden />
+          </label>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="paper">
+        <div class="paper__hint">
+          Cole seu texto aqui. O app vai limpar a formatação e organizar em parágrafos.
+        </div>
+
+        <article id="editor" class="editor" contenteditable="true" spellcheck="false"></article>
+      </section>
+
+      <aside id="notesPanel" class="notesPanel is-collapsed" aria-label="Notas">
+        <div class="notesPanel__header">
+          <div class="notesPanel__title">Notas</div>
+          <button id="btnCollapseNotes" class="btn btn--ghost" title="Recolher (Ctrl+B)">⟷</button>
+        </div>
+
+        <div id="notesList" class="notesList"></div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusText">Pronto.</span>
+    </footer>
+
+    <dialog id="noteDialog" class="dialog">
+      <form method="dialog" class="dialog__content">
+        <h3 class="dialog__title">Nova nota</h3>
+        <p class="dialog__subtitle" id="noteDialogSubtitle"></p>
+
+        <textarea id="noteText" class="dialog__textarea" placeholder="Digite sua nota..."></textarea>
+
+        <div class="dialog__actions">
+          <button value="cancel" class="btn btn--ghost">Cancelar</button>
+          <button id="btnConfirmNote" value="default" class="btn">Salvar nota</button>
+        </div>
+      </form>
+    </dialog>
+
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
