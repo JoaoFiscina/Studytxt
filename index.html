@@ -19,6 +19,9 @@
         <input id="docTitle" class="docTitle" placeholder="Título do documento (opcional)" />
         <button id="btnNew" class="btn">Novo</button>
         <button id="btnSave" class="btn">Salvar</button>
+        <button id="btnUndo" class="btn btn--ghost" title="Desfazer (Ctrl+Z)">↶</button>
+        <button id="btnRedo" class="btn btn--ghost" title="Refazer (Ctrl+Y)">↷</button>
+        <button id="btnFocus" class="btn">Foco</button>
       </div>
 
       <div class="topbar__center">
@@ -43,11 +46,20 @@
           <input id="searchInput" class="search__input" placeholder="Buscar no texto (Ctrl+K)" />
           <button id="btnClearSearch" class="btn btn--ghost" title="Limpar busca">✕</button>
         </div>
+        <div class="pasteMode" aria-label="Modo de colagem">
+          <span id="pasteModeStatus" class="pasteMode__status">Colar: Estrutura</span>
+          <select id="pasteMode" class="pasteMode__select">
+            <option value="html">Estrutura</option>
+            <option value="plain">Texto limpo</option>
+            <option value="lines">Texto + quebras</option>
+          </select>
+        </div>
         <button id="btnToggleNotes" class="btn">Notas</button>
 
         <div class="menu">
           <button id="btnExportTxt" class="btn btn--ghost" title="Exportar TXT (Ctrl+Shift+E)">TXT</button>
           <button id="btnExportJson" class="btn btn--ghost" title="Exportar JSON (Ctrl+Shift+J)">JSON</button>
+          <button id="btnExportMd" class="btn btn--ghost" title="Exportar Markdown">MD</button>
           <button id="btnExportPdf" class="btn btn--ghost" title="Exportar PDF">PDF</button>
           <label class="btn btn--ghost" title="Importar JSON (Ctrl+Shift+I)">
             Importar
