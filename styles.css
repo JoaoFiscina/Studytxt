@@ -148,6 +148,24 @@ body{
   font-size: 12px;
 }
 
+.exportBar{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.exportBar .btn{
+  padding: 8px 10px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
 .main{
   display: grid;
   grid-template-columns: 1fr auto;
@@ -412,22 +430,54 @@ mark.hl-5{ background: #e9d8fd; }
   margin-top: 10px;
 }
 
-body.is-focus .notesPanel{
+.focusExit{
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 50;
   display: none;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-size: 13px;
 }
 
-body.is-focus .topbar{
-  position: sticky;
-  opacity: 0.98;
+body.is-focus{
+  background: #ffffff;
+}
+
+body.is-focus .focusExit{
+  display: inline-flex;
+}
+
+body.is-focus .topbar,
+body.is-focus .notesPanel,
+body.is-focus .statusbar,
+body.is-focus .paper__hint{
+  display: none !important;
+}
+
+body.is-focus .main{
+  padding: 0 !important;
+  grid-template-columns: 1fr !important;
 }
 
 body.is-focus .paper{
-  max-width: 980px;
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 28px 18px 40px !important;
 }
 
 body.is-focus .editor{
   font-size: 20px;
-  line-height: 1.85;
+  line-height: 1.9;
 }
 
 @media (max-width: 1100px){
@@ -442,6 +492,12 @@ body.is-focus .editor{
   }
   .notesPanel.is-collapsed{
     width: 100%;
+  }
+}
+
+@media (max-width: 900px){
+  .exportBar{
+    justify-content: flex-start;
   }
 }
 
