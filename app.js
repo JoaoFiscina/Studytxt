@@ -26,6 +26,7 @@ const btnExportMd = $("btnExportMd");
 const btnUndo = $("btnUndo");
 const btnRedo = $("btnRedo");
 const btnFocus = $("btnFocus");
+const btnExitFocus = $("btnExitFocus");
 const pasteModeSelect = $("pasteMode");
 const pasteModeStatus = $("pasteModeStatus");
 
@@ -1394,10 +1395,17 @@ function toggleFocusMode() {
   const isFocus = document.body.classList.contains("is-focus");
   localStorage.setItem(`${STORAGE_KEY}_focus`, isFocus ? "1" : "0");
   setStatus(isFocus ? "Modo foco ativado." : "Modo foco desativado.");
+  if (isFocus) {
+    editor.focus();
+  }
 }
 
 if (btnFocus) {
   btnFocus.addEventListener("click", toggleFocusMode);
+}
+
+if (btnExitFocus) {
+  btnExitFocus.addEventListener("click", toggleFocusMode);
 }
 
 if (btnUndo) btnUndo.addEventListener("click", undo);
