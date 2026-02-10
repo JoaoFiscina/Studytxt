@@ -36,6 +36,14 @@ const btnNormalize = $("btnNormalize");
 const btnReNormalize = $("btnReNormalize");
 const toggleAutoNormalize = $("toggleAutoNormalize");
 
+const mqMobile = window.matchMedia("(max-width: 860px)");
+const elNormalize = $("groupPaste");
+const elActions = $("groupActions");
+const elSearch = $("groupSearch");
+const elFont = $("groupView");
+const elExport = $("exportBar");
+const originalPos = new Map();
+
 const fileImportJson = $("fileImportJson");
 
 const STORAGE_KEY = "reader_grifos_v1_current";
@@ -1673,6 +1681,8 @@ function applyHighlight(catId) {
   pushHistory("highlight");
 }
 
+window.applyHighlight = applyHighlight;
+
 // Botões de highlight
 hlButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -2452,6 +2462,130 @@ if (btnReNormalize) {
   });
 }
 
+// ---------- Mobile responsive mount ----------
+function isMobile() {
+  return mqMobile.matches;
+}
+
+function rememberPos(el) {
+  if (!el || originalPos.has(el)) return;
+  originalPos.set(el, { parent: el.parentNode, nextSibling: el.nextSibling });
+}
+
+function restorePos(el) {
+  const pos = originalPos.get(el);
+  if (!pos || !pos.parent) return;
+  pos.parent.insertBefore(el, pos.nextSibling);
+}
+
+function wrapSection(title, el) {
+  const box = document.createElement("div");
+  box.className = "toolbarGroup";
+
+  const h = document.createElement("div");
+  h.style.fontWeight = "800";
+  h.style.marginBottom = "6px";
+  h.textContent = title;
+  box.appendChild(h);
+  box.appendChild(el);
+
+  return box;
+}
+
+function mountMobile() {
+  const mount = $("mobileToolsMount");
+  const notesMount = $("mobileNotesMount");
+  if (!mount || !notesMount) return;
+
+  [elNormalize, elActions, elSearch, elFont, elExport].forEach(rememberPos);
+
+  mount.innerHTML = "";
+  if (elNormalize) mount.appendChild(wrapSection("Colar & Normalizar", elNormalize));
+  if (elActions) mount.appendChild(wrapSection("Ações", elActions));
+  if (elSearch) mount.appendChild(wrapSection("Busca", elSearch));
+  if (elFont) mount.appendChild(wrapSection("Fonte", elFont));
+  if (elExport) mount.appendChild(wrapSection("Exportar", elExport));
+
+  const panel = $("notesPanel");
+  if (panel) {
+    rememberPos(panel);
+    notesMount.innerHTML = "";
+    notesMount.appendChild(panel);
+  }
+}
+
+function unmountMobile() {
+  [elNormalize, elActions, elSearch, elFont, elExport].forEach(restorePos);
+  restorePos($("notesPanel"));
+  closeDrawers();
+}
+
+function syncResponsive() {
+  if (isMobile()) mountMobile();
+  else unmountMobile();
+}
+
+const overlay = $("mobileOverlay");
+const drawerTools = $("mobileDrawerTools");
+const drawerNotes = $("mobileDrawerNotes");
+
+function closeDrawers() {
+  if (overlay) overlay.hidden = true;
+  drawerTools?.classList.remove("is-open");
+  drawerNotes?.classList.remove("is-open");
+  drawerTools?.setAttribute("aria-hidden", "true");
+  drawerNotes?.setAttribute("aria-hidden", "true");
+}
+
+function openDrawer(which) {
+  if (!isMobile()) return;
+  if (overlay) overlay.hidden = false;
+
+  if (which === "tools") {
+    drawerNotes?.classList.remove("is-open");
+    drawerNotes?.setAttribute("aria-hidden", "true");
+    drawerTools?.classList.add("is-open");
+    drawerTools?.setAttribute("aria-hidden", "false");
+  }
+
+  if (which === "notes") {
+    drawerTools?.classList.remove("is-open");
+    drawerTools?.setAttribute("aria-hidden", "true");
+    drawerNotes?.classList.add("is-open");
+    drawerNotes?.setAttribute("aria-hidden", "false");
+  }
+}
+
+$("btnMobileMenu")?.addEventListener("click", () => openDrawer("tools"));
+$("btnMobileNotes")?.addEventListener("click", () => openDrawer("notes"));
+$("btnCloseTools")?.addEventListener("click", closeDrawers);
+$("btnCloseNotes")?.addEventListener("click", closeDrawers);
+overlay?.addEventListener("click", closeDrawers);
+
+window.addEventListener(
+  "keydown",
+  (e) => {
+    if (e.key === "Escape") closeDrawers();
+  },
+  { capture: true }
+);
+
+$("bottomBar")?.addEventListener("click", (e) => {
+  const t = e.target;
+  if (!t) return;
+
+  const level = t.dataset?.hl;
+  if (!level) return;
+
+  const btn = document.querySelector(`.hlBtn[data-cat="${level}"]`) || $("hl" + level);
+  if (btn) btn.click();
+  else if (typeof window.applyHighlight === "function") window.applyHighlight(Number(level));
+});
+
+$("btnMobileNote")?.addEventListener("click", () => $("btnNote")?.click());
+$("btnMobileSection")?.addEventListener("click", () => $("btnSection")?.click());
+$("btnMobileFocus")?.addEventListener("click", () => $("btnFocus")?.click());
+
 // ---------- Keyboard shortcuts ----------
 document.addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
@@ -2550,5 +2684,7 @@ const focusPref = localStorage.getItem(`${STORAGE_KEY}_focus`);
 if (focusPref === "1") {
   setFocusMode(true);
 }
+syncResponsive();
+mqMobile.addEventListener("change", syncResponsive);
 pushHistory("init");
 setStatus("Pronto. Cole um texto para começar.");

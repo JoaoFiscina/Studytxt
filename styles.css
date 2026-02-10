@@ -153,6 +153,10 @@ body{
   border-radius: var(--radius);
 }
 
+.btn, select, input, .chip{
+  min-height: 44px;
+}
+
 .hlBar{
   display: flex;
   gap: 6px;
