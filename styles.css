@@ -476,39 +476,40 @@ mark.hl-5{ background: #e9d8fd; }
   font-size: 13px;
 }
 
-body.is-focus{
-  background: #ffffff;
-}
-
-body.is-focus .focusExit{
-  display: inline-flex;
-}
-
+/* ===== Modo foco (leve): esconde UI mas mantém paper ===== */
 body.is-focus .topbar,
 body.is-focus .notesPanel,
 body.is-focus .statusbar,
-body.is-focus .paper__hint{
+body.is-focus .paper__hint,
+body.is-focus .focusExit{
   display: none !important;
 }
 
+/* Mantém layout e centralização */
 body.is-focus .main{
-  padding: 0 !important;
+  padding: 24px !important;
   grid-template-columns: 1fr !important;
 }
 
+/* Mantém o card/paper com borda/sombra */
 body.is-focus .paper{
-  max-width: none !important;
-  width: 100% !important;
-  margin: 0 !important;
-  border: none !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  padding: 28px 18px 40px !important;
+  max-width: 1040px !important;
+  margin: 0 auto !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow) !important;
+  border-radius: 18px !important;
+  padding: 22px 24px !important;
 }
 
+/* Leitura maior, mas sem exagero */
 body.is-focus .editor{
-  font-size: 20px;
-  line-height: 1.9;
+  font-size: 18.5px;
+  line-height: 1.85;
+}
+
+/* Opcional: reduzir distrações no fundo */
+body.is-focus{
+  background: var(--bg);
 }
 
 @media (max-width: 1100px){
