@@ -16,45 +16,30 @@
   <div id="app">
     <header class="topbar">
       <div class="topbar__left">
+        <div class="brand" aria-label="Firead">
+          <span class="brand__name"><span class="brand__fi">Fi</span><span class="brand__read">read</span></span>
+          <span class="brand__tag">reader</span>
+        </div>
         <input id="docTitle" class="docTitle" placeholder="Título do documento (opcional)" />
-        <button id="btnNew" class="btn">Novo</button>
-        <button id="btnSave" class="btn">Salvar</button>
-        <button id="btnUndo" class="btn btn--ghost" title="Desfazer (Ctrl+Z)">↶</button>
-        <button id="btnRedo" class="btn btn--ghost" title="Refazer (Ctrl+Y)">↷</button>
-        <button id="btnFocus" class="btn">Foco</button>
+        <div class="toolbarGroup" id="groupDocActions">
+          <button id="btnNew" class="btn">Novo</button>
+          <button id="btnSave" class="btn">Salvar</button>
+          <button id="btnUndo" class="btn btn--ghost" title="Desfazer (Ctrl+Z)">↶</button>
+          <button id="btnRedo" class="btn btn--ghost" title="Refazer (Ctrl+Y)">↷</button>
+          <button id="btnFocus" class="btn">Foco</button>
+        </div>
       </div>
 
       <div class="topbar__center">
-        <div class="hlBar" aria-label="Grifos">
-          <button class="hlBtn hlBtn--1" data-cat="1" title="Definição (Ctrl+1)">1</button>
-          <button class="hlBtn hlBtn--2" data-cat="2" title="Conduta (Ctrl+2)">2</button>
-          <button class="hlBtn hlBtn--3" data-cat="3" title="Diagnóstico (Ctrl+3)">3</button>
-          <button class="hlBtn hlBtn--4" data-cat="4" title="DDx/Armadilhas (Ctrl+4)">4</button>
-          <button class="hlBtn hlBtn--5" data-cat="5" title="Evidência/Pérolas (Ctrl+5)">5</button>
-        </div>
-
-        <div class="tools">
-          <button id="btnNote" class="btn">Nota</button>
-          <button id="btnSection" class="btn">Criar seção</button>
-          <button id="btnAutoSections" class="btn">Auto-seções</button>
-          <button id="btnClean" class="btn">Limpar formatação</button>
-        </div>
-      </div>
-
-      <div class="topbar__right">
-        <div class="search">
-          <input id="searchInput" class="search__input" placeholder="Buscar no texto (Ctrl+K)" />
-          <button id="btnClearSearch" class="btn btn--ghost" title="Limpar busca">✕</button>
-        </div>
-        <div class="pasteMode" aria-label="Modo de colagem">
-          <span id="pasteModeStatus" class="pasteMode__status">Colar: Estrutura</span>
-          <select id="pasteMode" class="pasteMode__select">
-            <option value="html">Estrutura</option>
-            <option value="plain">Texto limpo</option>
-            <option value="lines">Texto + quebras</option>
-          </select>
-        </div>
-        <div class="toolbarGroup" aria-label="Normalização">
+        <div class="toolbarGroup" id="groupPaste" aria-label="Colar e normalizar">
+          <div class="pasteMode" aria-label="Modo de colagem">
+            <span id="pasteModeStatus" class="pasteMode__status">Colar: Estrutura</span>
+            <select id="pasteMode" class="pasteMode__select">
+              <option value="html">Estrutura</option>
+              <option value="plain">Texto limpo</option>
+              <option value="lines">Texto + quebras</option>
+            </select>
+          </div>
           <select id="normalizePreset" class="select">
             <option value="auto">Auto</option>
             <option value="pdf">PDF</option>
@@ -64,20 +49,55 @@
             <option value="notebooklm">NotebookLM</option>
           </select>
           <button id="btnNormalize" class="btn">Normalizar</button>
-          <label class="toggle"><input id="toggleAutoNormalize" type="checkbox" /> Auto ao colar</label>
           <button id="btnReNormalize" class="btn btn--ghost" title="Reaplicar usando o texto/HTML original do último paste">Re-normalizar</button>
+          <label class="toggle"><input id="toggleAutoNormalize" type="checkbox" /> Auto ao colar</label>
         </div>
-        <div class="fontPicker">
-          <label for="fontSelect" class="fontPicker__label">Fonte:</label>
-          <select id="fontSelect" class="select">
-            <option value='ui-serif, Georgia, "Times New Roman", Times, serif'>Serif (padrão)</option>
-            <option value='ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'>Sans</option>
-            <option value='"Rockwell Nova Condensed", ui-serif, Georgia, "Times New Roman", Times, serif'>Rockwell</option>
-          </select>
-        </div>
-        <button id="btnToggleNotes" class="btn">Notas</button>
 
-        <div class="exportBar" id="exportBar">
+        <div class="toolbarDivider" aria-hidden="true"></div>
+
+        <div class="toolbarGroup" id="groupActions" aria-label="Ações">
+          <div class="hlBar" aria-label="Grifos">
+            <button class="hlBtn hlBtn--1" data-cat="1" title="Definição (Ctrl+1)">1</button>
+            <button class="hlBtn hlBtn--2" data-cat="2" title="Conduta (Ctrl+2)">2</button>
+            <button class="hlBtn hlBtn--3" data-cat="3" title="Diagnóstico (Ctrl+3)">3</button>
+            <button class="hlBtn hlBtn--4" data-cat="4" title="DDx/Armadilhas (Ctrl+4)">4</button>
+            <button class="hlBtn hlBtn--5" data-cat="5" title="Evidência/Pérolas (Ctrl+5)">5</button>
+          </div>
+
+          <div class="tools">
+            <button id="btnNote" class="btn">Nota</button>
+            <button id="btnSection" class="btn">Criar seção</button>
+            <button id="btnAutoSections" class="btn">Auto-seções</button>
+            <button id="btnClean" class="btn">Limpar formatação</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="topbar__right">
+        <div class="toolbarGroup" id="groupSearch" aria-label="Busca">
+          <div class="search">
+            <input id="searchInput" class="search__input" placeholder="Buscar no texto (Ctrl+K)" />
+            <button id="btnClearSearch" class="btn btn--ghost" title="Limpar busca">✕</button>
+          </div>
+        </div>
+
+        <div class="toolbarDivider" aria-hidden="true"></div>
+
+        <div class="toolbarGroup" id="groupView">
+          <div class="fontPicker">
+            <label for="fontSelect" class="fontPicker__label">Fonte:</label>
+            <select id="fontSelect" class="select">
+              <option value='ui-serif, Georgia, "Times New Roman", Times, serif'>Serif (padrão)</option>
+              <option value='ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'>Sans</option>
+              <option value='"Rockwell Nova Condensed", ui-serif, Georgia, "Times New Roman", Times, serif'>Rockwell</option>
+            </select>
+          </div>
+          <button id="btnToggleNotes" class="btn">Notas</button>
+        </div>
+
+        <div class="toolbarDivider" aria-hidden="true"></div>
+
+        <div class="toolbarGroup exportBar" id="exportBar">
           <button id="btnExportTxt" class="btn btn--ghost" title="Exportar TXT (Ctrl+Shift+E)">TXT</button>
           <button id="btnExportJson" class="btn btn--ghost" title="Exportar JSON (Ctrl+Shift+J)">JSON</button>
           <button id="btnExportMd" class="btn btn--ghost" title="Exportar Markdown">MD</button>
