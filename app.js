@@ -29,10 +29,12 @@ const btnFocus = $("btnFocus");
 const btnExitFocus = $("btnExitFocus");
 const pasteModeSelect = $("pasteMode");
 const pasteModeStatus = $("pasteModeStatus");
+const fontSelect = $("fontSelect");
 
 const fileImportJson = $("fileImportJson");
 
 const STORAGE_KEY = "reader_grifos_v1_current";
+const STORAGE_FONT = "studytxt_editor_font";
 
 const HLCATS = [
   { id: 1, name: "Definição", cls: "hl-1" },
@@ -1419,6 +1421,15 @@ if (pasteModeSelect) {
   });
 }
 
+if (fontSelect) {
+  fontSelect.addEventListener("change", () => {
+    const selectedFont = fontSelect.value;
+    document.documentElement.style.setProperty("--editor-font", selectedFont);
+    localStorage.setItem(STORAGE_FONT, selectedFont);
+    setStatus("Fonte aplicada.");
+  });
+}
+
 // ---------- Keyboard shortcuts ----------
 document.addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
@@ -1512,6 +1523,11 @@ renderNotes();
 if (pasteModeSelect) {
   pasteMode = pasteModeSelect.value || "html";
   updatePasteModeStatus();
+}
+const savedFont = localStorage.getItem(STORAGE_FONT);
+if (savedFont) {
+  document.documentElement.style.setProperty("--editor-font", savedFont);
+  if (fontSelect) fontSelect.value = savedFont;
 }
 const focusPref = localStorage.getItem(`${STORAGE_KEY}_focus`);
 if (focusPref === "1") {
