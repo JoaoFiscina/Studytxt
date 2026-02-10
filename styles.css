@@ -486,9 +486,14 @@ mark.hl-5{ background: #e9d8fd; }
 body.is-focus .topbar,
 body.is-focus .notesPanel,
 body.is-focus .statusbar,
-body.is-focus .paper__hint,
-body.is-focus .focusExit{
+body.is-focus .paper__hint{
   display: none !important;
+}
+
+body.is-focus .focusExit{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Mantém layout e centralização */
