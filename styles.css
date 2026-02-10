@@ -461,18 +461,18 @@ body.is-focus .paper__hint{
 }
 
 body.is-focus .main{
-  padding: 18px 14px 28px !important;
+  padding: 0 !important;
   grid-template-columns: 1fr !important;
 }
 
 body.is-focus .paper{
-  max-width: 980px !important;
-  width: min(980px, 100%) !important;
-  margin: 0 auto !important;
-  border: 1px solid var(--border) !important;
-  box-shadow: var(--shadow) !important;
-  border-radius: var(--radius) !important;
-  padding: 24px 22px 32px !important;
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 28px 18px 40px !important;
 }
 
 body.is-focus .editor{
