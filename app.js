@@ -30,11 +30,16 @@ const btnExitFocus = $("btnExitFocus");
 const pasteModeSelect = $("pasteMode");
 const pasteModeStatus = $("pasteModeStatus");
 const fontSelect = $("fontSelect");
+const normalizePreset = $("normalizePreset");
+const btnNormalize = $("btnNormalize");
+const btnReNormalize = $("btnReNormalize");
+const toggleAutoNormalize = $("toggleAutoNormalize");
 
 const fileImportJson = $("fileImportJson");
 
 const STORAGE_KEY = "reader_grifos_v1_current";
 const STORAGE_FONT = "studytxt_editor_font";
+const STORAGE_RAW = "studytxt_last_raw_v1";
 
 const HLCATS = [
   { id: 1, name: "Definição", cls: "hl-1" },
@@ -57,6 +62,7 @@ let autosaveTimer = null;
 let lastSelectionRange = null;
 let historyTimer = null;
 let pasteMode = "html";
+let lastRaw = null; // { html, text, detected, ts }
 
 const history = { undo: [], redo: [] };
 const HISTORY_LIMIT = 40;
@@ -73,6 +79,40 @@ function setStatus(msg) {
 
 function escapeForTextExport(s) {
   return (s || "").replace(/\r/g, "");
+}
+
+function loadLastRaw() {
+  try {
+    const raw = localStorage.getItem(STORAGE_RAW);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return null;
+    if (typeof data.html !== "string" || typeof data.text !== "string") return null;
+    if (typeof data.ts !== "number") return null;
+    return {
+      html: data.html,
+      text: data.text,
+      detected: typeof data.detected === "string" ? data.detected : null,
+      ts: data.ts,
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+function saveLastRaw(obj) {
+  if (!obj) return;
+  localStorage.setItem(STORAGE_RAW, JSON.stringify(obj));
+}
+
+function setLastRaw({ html, text, detected }) {
+  lastRaw = {
+    html: html || "",
+    text: text || "",
+    detected: detected || null,
+    ts: Date.now(),
+  };
+  saveLastRaw(lastRaw);
 }
 
 function isSafeUrl(href) {
@@ -370,6 +410,562 @@ function sanitizeHTMLToFragment(html) {
   return template.content;
 }
 
+function escapeHTML(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function detectPreset({ html, text }) {
+  const plain = (text || "").trim();
+  const lower = plain.toLowerCase();
+  const htmlValue = html || "";
+
+  const hasCitations = /\[\d+\]/.test(plain);
+  if (/sources|citations|source\s+\d+/i.test(plain) && hasCitations) {
+    return "notebooklm";
+  }
+
+  if (/^###\s+/m.test(plain) || /^\*\*.+?\*\*:\s+/m.test(plain)) {
+    return "gemini";
+  }
+
+  const hasGeminiLabels = (plain.match(/\b(resposta|conclusão):/gi) || []).length >= 2;
+  if (hasGeminiLabels) return "gemini";
+
+  const numberedItems = (plain.match(/^\d+\.\s+/gm) || []).length;
+  if ((/em resumo|abaixo/i.test(lower)) && numberedItems >= 2) {
+    return "chatgpt";
+  }
+
+  const lineBreaks = (plain.match(/\n/g) || []).length;
+  const lines = plain.split("\n").filter(Boolean);
+  const shortLines = lines.filter(line => line.trim().length > 0 && line.trim().length <= 60).length;
+  const avgShortRatio = lines.length ? shortLines / lines.length : 0;
+  if (lineBreaks >= 8 && avgShortRatio >= 0.55) {
+    if (/-\n/.test(plain) || /-\s*\n/.test(plain)) {
+      return "pdf";
+    }
+  }
+
+  const hasStructuredTags = /<(ul|ol|table|h[1-4])\b/i.test(htmlValue);
+  const divSpanCount = (htmlValue.match(/<(div|span)\b/gi) || []).length;
+  if (htmlValue && (hasStructuredTags || divSpanCount >= 4)) {
+    return "site";
+  }
+
+  return "site";
+}
+
+function safeDehyphenate(text) {
+  let output = text || "";
+  const regex = /([A-Za-zÀ-ÖØ-öø-ÿ]{2,})-\n([A-Za-zÀ-ÖØ-öø-ÿ]{2,})/g;
+  const greekRegex = /[\u0370-\u03FF]/;
+
+  for (let i = 0; i < 2; i += 1) {
+    output = output.replace(regex, (match, left, right) => {
+      if (/[A-ZÀ-ÖØ-Þ0-9]/.test(right[0])) return match;
+      if (greekRegex.test(right[0])) return match;
+      if (/[A-Z0-9]{2,}$/.test(left)) return match;
+      return `${left}${right}`;
+    });
+  }
+
+  return output;
+}
+
+function fixGluedWords(text) {
+  let output = text || "";
+  output = output.replace(/([a-zà-öø-ÿ]{3,})([A-ZÀ-ÖØ-Þ])/g, "$1 $2");
+  output = output.replace(/([A-Za-zÀ-ÖØ-öø-ÿ]{3,}):([A-Za-zÀ-ÖØ-öø-ÿ])/g, "$1: $2");
+  return output;
+}
+
+function detectHeadings(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  if (/^###\s+/.test(trimmed)) {
+    return { type: "h3", text: trimmed.replace(/^###\s+/, "") };
+  }
+  if (/^##?\s+/.test(trimmed)) {
+    return { type: "h2", text: trimmed.replace(/^##?\s+/, "") };
+  }
+  if (/^\d+\.\s+/.test(trimmed) || /^[IVX]+\.\s+/i.test(trimmed)) {
+    return { type: "h2", text: trimmed.replace(/^[IVX\d]+\.\s+/i, "") };
+  }
+  const isShort = trimmed.length <= 70;
+  const isCaps = /[A-ZÀ-ÖØ-Þ]/.test(trimmed) && trimmed === trimmed.toUpperCase();
+  const endsWithColon = /:$/.test(trimmed);
+  if (isShort && (endsWithColon || isCaps || looksLikeTitleCase(trimmed))) {
+    return { type: "h2", text: trimmed.replace(/:$/, "") };
+  }
+  return null;
+}
+
+function looksLikeTitleCase(line) {
+  const words = line.split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  const titleWords = words.filter(word => /^[A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'-]*$/.test(word));
+  return titleWords.length / words.length >= 0.7;
+}
+
+function joinWrappedLines(text) {
+  const lines = (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const output = [];
+  let buffer = "";
+  let inCodeBlock = false;
+
+  const flush = () => {
+    if (!buffer) return;
+    const normalized = buffer.replace(/\s+/g, " ").trim();
+    if (normalized) output.push(normalized);
+    buffer = "";
+  };
+
+  lines.forEach((line) => {
+    const rawLine = line.replace(/\s+$/g, "");
+    const trimmed = rawLine.trim();
+
+    if (trimmed.startsWith("```")) {
+      flush();
+      inCodeBlock = !inCodeBlock;
+      output.push(rawLine);
+      return;
+    }
+
+    if (inCodeBlock) {
+      output.push(rawLine);
+      return;
+    }
+
+    if (!trimmed) {
+      flush();
+      output.push("");
+      return;
+    }
+
+    if (detectHeadings(trimmed)) {
+      flush();
+      output.push(trimmed);
+      return;
+    }
+
+    if (!buffer) {
+      buffer = trimmed;
+      return;
+    }
+
+    const endsWithPunct = /[.:;?!]$/.test(buffer.trim());
+    const nextStartsLower = /^[a-zà-öø-ÿ]/.test(trimmed);
+    if (!endsWithPunct && nextStartsLower) {
+      buffer = `${buffer.trim()} ${trimmed}`;
+      return;
+    }
+
+    flush();
+    buffer = trimmed;
+  });
+
+  flush();
+  return output.join("\n");
+}
+
+function markerToListType(marker) {
+  if (/^\d/.test(marker) || /^[a-zA-Z]/.test(marker) || /^\([a-zA-Z]\)/.test(marker)) {
+    return "ol";
+  }
+  return "ul";
+}
+
+function detectAndBuildLists(lines) {
+  const blocks = [];
+  const listRegex = /^(\s*)([•\-–*]|\d+[.)]|[a-zA-Z][.)]|\([a-zA-Z]\))\s+(.*)$/;
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const match = line.match(listRegex);
+    if (!match) {
+      blocks.push({ type: "line", text: line });
+      i += 1;
+      continue;
+    }
+
+    const baseIndent = match[1].length;
+    const root = { type: markerToListType(match[2]), items: [], indent: baseIndent };
+    const stack = [root];
+
+    while (i < lines.length) {
+      const current = lines[i];
+      const currentMatch = current.match(listRegex);
+      if (!currentMatch) break;
+      const indent = currentMatch[1].length;
+      const marker = currentMatch[2];
+      const content = currentMatch[3].trim();
+      const listType = markerToListType(marker);
+      if (indent < baseIndent) break;
+
+      while (stack.length > 1 && indent < stack[stack.length - 1].indent) {
+        stack.pop();
+      }
+
+      if (indent > stack[stack.length - 1].indent) {
+        const parent = stack[stack.length - 1];
+        const lastItem = parent.items[parent.items.length - 1];
+        if (lastItem) {
+          const childList = { type: listType, items: [], indent };
+          lastItem.children = childList;
+          stack.push(childList);
+        }
+      } else if (listType !== stack[stack.length - 1].type && indent === stack[stack.length - 1].indent) {
+        break;
+      }
+
+      const targetList = stack[stack.length - 1];
+      targetList.items.push({ text: content });
+      i += 1;
+    }
+
+    blocks.push({ type: root.type, items: root.items });
+  }
+
+  return blocks;
+}
+
+function buildBlocksFromLines(lines) {
+  const chunks = detectAndBuildLists(lines);
+  const blocks = [];
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    const text = paragraph.join(" ").replace(/\s+/g, " ").trim();
+    if (text) blocks.push({ type: "p", text });
+    paragraph = [];
+  };
+
+  chunks.forEach((chunk) => {
+    if (chunk.type === "line") {
+      const trimmed = chunk.text.trim();
+      if (!trimmed) {
+        flushParagraph();
+        return;
+      }
+      const heading = detectHeadings(trimmed);
+      if (heading) {
+        flushParagraph();
+        blocks.push(heading);
+        return;
+      }
+      paragraph.push(trimmed);
+      return;
+    }
+
+    if (chunk.type === "ul" || chunk.type === "ol") {
+      flushParagraph();
+      blocks.push(chunk);
+    }
+  });
+
+  flushParagraph();
+  return blocks;
+}
+
+function renderList(type, items) {
+  const list = document.createElement(type);
+  items.forEach((item) => {
+    const li = document.createElement("li");
+    if (item.html) {
+      li.innerHTML = item.html;
+    } else {
+      li.textContent = item.text || "";
+    }
+    if (item.children) {
+      li.appendChild(renderList(item.children.type, item.children.items));
+    }
+    list.appendChild(li);
+  });
+  return list;
+}
+
+function renderBlocksToFragment(blocks) {
+  const frag = document.createDocumentFragment();
+
+  blocks.forEach((block) => {
+    if (block.type === "p") {
+      const p = document.createElement("p");
+      if (block.html) {
+        p.innerHTML = block.html;
+      } else {
+        p.textContent = block.text || "";
+      }
+      frag.appendChild(p);
+      return;
+    }
+
+    if (block.type === "h2" || block.type === "h3") {
+      const heading = document.createElement(block.type);
+      heading.textContent = block.text || "";
+      frag.appendChild(heading);
+      return;
+    }
+
+    if (block.type === "ul" || block.type === "ol") {
+      frag.appendChild(renderList(block.type, block.items || []));
+      return;
+    }
+
+    if (block.type === "blockquote") {
+      const el = document.createElement("blockquote");
+      if (block.html) {
+        el.innerHTML = block.html;
+      } else {
+        el.textContent = block.text || "";
+      }
+      frag.appendChild(el);
+      return;
+    }
+
+    if (block.type === "pre") {
+      const pre = document.createElement("pre");
+      pre.textContent = block.text || "";
+      frag.appendChild(pre);
+      return;
+    }
+
+    if (block.type === "hr") {
+      frag.appendChild(document.createElement("hr"));
+      return;
+    }
+
+    if (block.type === "table" && block.html) {
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = block.html;
+      const table = wrapper.querySelector("table");
+      if (table) frag.appendChild(table);
+      return;
+    }
+
+    if (block.type === "refSection") {
+      const details = document.createElement("details");
+      details.className = "section";
+      const summary = document.createElement("summary");
+      summary.textContent = block.title || "Referências";
+      details.appendChild(summary);
+      details.appendChild(renderBlocksToFragment(block.blocks || []));
+      frag.appendChild(details);
+    }
+  });
+
+  return frag;
+}
+
+function renderBlocksToHTML(blocks) {
+  const container = document.createElement("div");
+  container.appendChild(renderBlocksToFragment(blocks));
+  return container.innerHTML;
+}
+
+function applyNotebookLmSuperscripts(text) {
+  const escaped = escapeHTML(text);
+  return escaped.replace(/\[(\d+)\]/g, "<sup>[$1]</sup>");
+}
+
+function applySuperscriptsToList(items) {
+  return (items || []).map((item) => {
+    const nextItem = { ...item, html: applyNotebookLmSuperscripts(item.text || "") };
+    if (item.children) {
+      nextItem.children = {
+        ...item.children,
+        items: applySuperscriptsToList(item.children.items),
+      };
+    }
+    return nextItem;
+  });
+}
+
+function pdfNormalize(text) {
+  const dehyphenated = safeDehyphenate(text);
+  const fixed = fixGluedWords(dehyphenated);
+  const joined = joinWrappedLines(fixed);
+  const lines = joined.split("\n").map(line => line.replace(/\s+$/g, ""));
+  const blocks = buildBlocksFromLines(lines);
+  return renderBlocksToHTML(blocks);
+}
+
+function llmNormalize(text, mode) {
+  const cleaned = fixGluedWords(safeDehyphenate(text));
+  const lines = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").map(line => line.replace(/\s+$/g, ""));
+  const blocks = [];
+  let buffer = [];
+  let references = [];
+  let inReferences = false;
+
+  const flushBuffer = () => {
+    if (!buffer.length) return;
+    const bufferedBlocks = buildBlocksFromLines(buffer);
+    if (mode === "notebooklm") {
+      bufferedBlocks.forEach((block) => {
+        if (block.type === "p") {
+          block.html = applyNotebookLmSuperscripts(block.text || "");
+          delete block.text;
+        }
+        if (block.type === "ul" || block.type === "ol") {
+          block.items = applySuperscriptsToList(block.items || []);
+        }
+      });
+    }
+    blocks.push(...bufferedBlocks);
+    buffer = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (inReferences) {
+        references.push("");
+      } else {
+        buffer.push("");
+      }
+      return;
+    }
+
+    if (mode === "notebooklm" && /^(sources|citations|source\s+\d+)/i.test(trimmed)) {
+      flushBuffer();
+      inReferences = true;
+      references.push(trimmed);
+      return;
+    }
+
+    if (inReferences) {
+      references.push(trimmed);
+      return;
+    }
+
+    if (mode === "gemini") {
+      if (/^###\s+/.test(trimmed)) {
+        flushBuffer();
+        blocks.push({ type: "h3", text: trimmed.replace(/^###\s+/, "") });
+        return;
+      }
+      const boldMatch = trimmed.match(/^\*\*(.+?)\*\*:\s*(.*)$/);
+      if (boldMatch) {
+        flushBuffer();
+        const label = escapeHTML(boldMatch[1]);
+        const rest = escapeHTML(boldMatch[2]);
+        blocks.push({ type: "p", html: `<strong>${label}:</strong>${rest ? ` ${rest}` : ""}` });
+        return;
+      }
+      const calloutMatch = trimmed.match(/^(Resposta|Conclusão):\s*(.*)$/i);
+      if (calloutMatch) {
+        flushBuffer();
+        const label = escapeHTML(calloutMatch[1]);
+        const rest = escapeHTML(calloutMatch[2]);
+        blocks.push({ type: "blockquote", html: `<strong>${label}:</strong>${rest ? ` ${rest}` : ""}` });
+        return;
+      }
+    }
+
+    if (mode === "chatgpt" && /^\d+\.\s+/.test(trimmed)) {
+      flushBuffer();
+      blocks.push({ type: "h2", text: trimmed.replace(/^\d+\.\s+/, "") });
+      return;
+    }
+
+    buffer.push(trimmed);
+  });
+
+  flushBuffer();
+
+  if (mode === "notebooklm" && references.length) {
+    const refBlocks = buildBlocksFromLines(references);
+    refBlocks.forEach((block) => {
+      if (block.type === "p") {
+        block.html = applyNotebookLmSuperscripts(block.text || "");
+        delete block.text;
+      }
+      if (block.type === "ul" || block.type === "ol") {
+        block.items = applySuperscriptsToList(block.items || []);
+      }
+    });
+    blocks.push({ type: "refSection", title: "Referências", blocks: refBlocks });
+  }
+
+  return renderBlocksToHTML(blocks);
+}
+
+function siteNormalize(html, text) {
+  if (html) {
+    const fragment = sanitizeHTMLToFragment(html);
+    const wrapper = document.createElement("div");
+    wrapper.appendChild(fragment);
+    return wrapper.innerHTML;
+  }
+  return pdfNormalize(text);
+}
+
+function normalizeFromRaw({ preset, raw }) {
+  if (!raw) return { htmlOut: "", meta: { preset: "site" } };
+  let chosenPreset = preset || "auto";
+  if (chosenPreset === "auto") {
+    chosenPreset = raw.detected || detectPreset(raw);
+  }
+
+  let htmlOut = "";
+  if (chosenPreset === "pdf") {
+    htmlOut = pdfNormalize(raw.text || "");
+  } else if (chosenPreset === "chatgpt") {
+    htmlOut = llmNormalize(raw.text || "", "chatgpt");
+  } else if (chosenPreset === "gemini") {
+    htmlOut = llmNormalize(raw.text || "", "gemini");
+  } else if (chosenPreset === "notebooklm") {
+    htmlOut = llmNormalize(raw.text || "", "notebooklm");
+  } else if (chosenPreset === "site") {
+    htmlOut = siteNormalize(raw.html || "", raw.text || "");
+  } else {
+    htmlOut = pdfNormalize(raw.text || "");
+  }
+
+  return { htmlOut, meta: { preset: chosenPreset } };
+}
+
+function hasNormalizationRisk() {
+  return Boolean(editor.querySelector("mark, .note-anchor, details.section"));
+}
+
+function confirmNormalization() {
+  if (!hasNormalizationRisk()) return true;
+  return window.confirm("Normalizar vai recriar a estrutura e pode afetar grifos/notas. Continuar?");
+}
+
+function getRecentRaw() {
+  if (!lastRaw || !lastRaw.ts) return null;
+  const age = Date.now() - lastRaw.ts;
+  if (age <= 5 * 60 * 1000) return lastRaw;
+  return null;
+}
+
+function getRawFromEditor() {
+  const html = editor.innerHTML || "";
+  const text = editor.innerText || "";
+  return {
+    html,
+    text,
+    detected: detectPreset({ html, text }),
+  };
+}
+
+function applyNormalization(preset, raw) {
+  const { htmlOut, meta } = normalizeFromRaw({ preset, raw });
+  editor.innerHTML = htmlOut;
+  scheduleAutosave(`Normalizado (${meta.preset}).`);
+  pushHistory("normalize");
+  setStatus(`Texto normalizado (${meta.preset}).`);
+}
+
 function placeCaretAfter(node) {
   const sel = window.getSelection();
   const range = document.createRange();
@@ -632,6 +1228,23 @@ editor.addEventListener("paste", (e) => {
   const clipboard = e.clipboardData || window.clipboardData;
   const html = clipboard.getData("text/html");
   const text = clipboard.getData("text/plain");
+  const detected = detectPreset({ html, text });
+  setLastRaw({ html, text, detected });
+
+  const selectedPreset = normalizePreset ? normalizePreset.value : "auto";
+  const shouldAutoNormalize = toggleAutoNormalize && toggleAutoNormalize.checked;
+
+  if (shouldAutoNormalize) {
+    if (!confirmNormalization()) return;
+    const { htmlOut, meta } = normalizeFromRaw({
+      preset: selectedPreset,
+      raw: lastRaw,
+    });
+    editor.innerHTML = htmlOut;
+    scheduleAutosave(`Normalizado (${meta.preset}).`);
+    pushHistory("normalize");
+    return;
+  }
 
   if (pasteMode === "html" && html) {
     const fragment = sanitizeHTMLToFragment(html);
@@ -1451,6 +2064,27 @@ if (fontSelect) {
   });
 }
 
+if (btnNormalize) {
+  btnNormalize.addEventListener("click", () => {
+    if (!confirmNormalization()) return;
+    const preset = normalizePreset ? normalizePreset.value : "auto";
+    const raw = getRecentRaw() || getRawFromEditor();
+    applyNormalization(preset, raw);
+  });
+}
+
+if (btnReNormalize) {
+  btnReNormalize.addEventListener("click", () => {
+    if (!lastRaw) {
+      alert("Cole um texto primeiro.");
+      return;
+    }
+    if (!confirmNormalization()) return;
+    const preset = normalizePreset ? normalizePreset.value : "auto";
+    applyNormalization(preset, lastRaw);
+  });
+}
+
 // ---------- Keyboard shortcuts ----------
 document.addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
@@ -1535,6 +2169,7 @@ document.addEventListener("keydown", (e) => {
 // ---------- Init ----------
 loadFromLocal();
 renderNotes();
+lastRaw = loadLastRaw();
 if (pasteModeSelect) {
   pasteMode = pasteModeSelect.value || "html";
   updatePasteModeStatus();
