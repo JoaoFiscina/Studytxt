@@ -113,6 +113,12 @@ body{
   font-weight: 600;
 }
 
+.hlBtn--1{ background: #fff3b0; }
+.hlBtn--2{ background: #caffbf; }
+.hlBtn--3{ background: #bde0fe; }
+.hlBtn--4{ background: #ffd6a5; }
+.hlBtn--5{ background: #e9d8fd; }
+
 .tools{
   display: flex;
   gap: 8px;
