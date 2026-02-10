@@ -471,10 +471,11 @@ mark.hl-5{ background: #e9d8fd; }
   position: fixed;
   right: 14px;
   bottom: 14px;
-  z-index: 50;
+  z-index: 9999;
   display: none;
   border: 1px solid var(--border);
   background: var(--panel);
+  color: inherit;
   border-radius: 12px;
   padding: 10px 12px;
   box-shadow: var(--shadow);
@@ -491,9 +492,7 @@ body.is-focus .paper__hint{
 }
 
 body.is-focus .focusExit{
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: inline-flex !important;
 }
 
 /* Mantém layout e centralização */
