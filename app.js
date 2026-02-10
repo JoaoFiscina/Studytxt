@@ -1392,9 +1392,9 @@ function toggleNotes() {
 $("btnToggleNotes").addEventListener("click", toggleNotes);
 $("btnCollapseNotes").addEventListener("click", toggleNotes);
 
-function toggleFocusMode() {
-  document.body.classList.toggle("is-focus");
-  const isFocus = document.body.classList.contains("is-focus");
+function setFocusMode(on) {
+  const isFocus = !!on;
+  document.body.classList.toggle("is-focus", isFocus);
   localStorage.setItem(`${STORAGE_KEY}_focus`, isFocus ? "1" : "0");
   setStatus(isFocus ? "Modo foco ativado." : "Modo foco desativado.");
   if (isFocus) {
@@ -1402,13 +1402,34 @@ function toggleFocusMode() {
   }
 }
 
+function toggleFocus() {
+  setFocusMode(!document.body.classList.contains("is-focus"));
+}
+
 if (btnFocus) {
-  btnFocus.addEventListener("click", toggleFocusMode);
+  btnFocus.addEventListener("click", toggleFocus);
 }
 
 if (btnExitFocus) {
-  btnExitFocus.addEventListener("click", toggleFocusMode);
+  btnExitFocus.addEventListener("click", () => setFocusMode(false));
 }
+
+window.addEventListener(
+  "keydown",
+  (e) => {
+    if (e.key === "Escape" && document.body.classList.contains("is-focus")) {
+      e.preventDefault();
+      setFocusMode(false);
+      return;
+    }
+
+    if (e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+      e.preventDefault();
+      toggleFocus();
+    }
+  },
+  { capture: true }
+);
 
 if (btnUndo) btnUndo.addEventListener("click", undo);
 if (btnRedo) btnRedo.addEventListener("click", redo);
@@ -1509,12 +1530,6 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  // Ctrl+Shift+F modo foco
-  if (ctrl && e.shiftKey && e.key.toLowerCase() === "f") {
-    e.preventDefault();
-    toggleFocusMode();
-    return;
-  }
 });
 
 // ---------- Init ----------
@@ -1531,7 +1546,7 @@ if (savedFont) {
 }
 const focusPref = localStorage.getItem(`${STORAGE_KEY}_focus`);
 if (focusPref === "1") {
-  document.body.classList.add("is-focus");
+  setFocusMode(true);
 }
 pushHistory("init");
 setStatus("Pronto. Cole um texto para começar.");
