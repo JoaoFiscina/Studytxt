@@ -27,6 +27,7 @@ const btnUndo = $("btnUndo");
 const btnRedo = $("btnRedo");
 const btnFocus = $("btnFocus");
 const btnExitFocus = $("btnExitFocus");
+const hlButtons = Array.from(document.getElementsByClassName("hlBtn"));
 const pasteModeSelect = $("pasteMode");
 const pasteModeStatus = $("pasteModeStatus");
 const fontSelect = $("fontSelect");
@@ -542,7 +543,8 @@ function detectPreset({ html, text }) {
   const htmlValue = html || "";
 
   const hasCitations = /\[\d+\]/.test(plain);
-  if (/sources|citations|source\s+\d+/i.test(plain) && hasCitations) {
+  const notebookSignals = [/(?:^|\n)\s*(sources|citations|source\s+\d+)\b/i, /key takeaways?/i, /\bsource\s*1\b/i];
+  if (hasCitations && notebookSignals.some((re) => re.test(plain))) {
     return "notebooklm";
   }
 
@@ -550,11 +552,12 @@ function detectPreset({ html, text }) {
     return "gemini";
   }
 
-  const hasGeminiLabels = (plain.match(/\b(resposta|conclusão):/gi) || []).length >= 2;
+  const hasGeminiLabels = (plain.match(/\*\*.+?\*\*:\s+/g) || []).length >= 2
+    || (plain.match(/\b(resposta|conclusão):/gi) || []).length >= 2;
   if (hasGeminiLabels) return "gemini";
 
-  const numberedItems = (plain.match(/^\d+\.\s+/gm) || []).length;
-  if ((/em resumo|abaixo/i.test(lower)) && numberedItems >= 2) {
+  const numberedItems = (plain.match(/^\d+[.)]\s+/gm) || []).length;
+  if (numberedItems >= 3 && /(?:^|\n)\d+[.)]\s+/.test(plain) && !/^#{1,3}\s+/m.test(plain)) {
     return "chatgpt";
   }
 
@@ -562,10 +565,9 @@ function detectPreset({ html, text }) {
   const lines = plain.split("\n").filter(Boolean);
   const shortLines = lines.filter(line => line.trim().length > 0 && line.trim().length <= 60).length;
   const avgShortRatio = lines.length ? shortLines / lines.length : 0;
-  if (lineBreaks >= 8 && avgShortRatio >= 0.55) {
-    if (/-\n/.test(plain) || /-\s*\n/.test(plain)) {
-      return "pdf";
-    }
+  const hyphenBreaks = (plain.match(/-\s*\n[a-zà-öø-ÿ]/g) || []).length;
+  if (lineBreaks >= 8 && avgShortRatio >= 0.55 && hyphenBreaks >= 1) {
+    return "pdf";
   }
 
   const hasStructuredTags = /<(ul|ol|table|h[1-4])\b/i.test(htmlValue);
@@ -579,7 +581,7 @@ function detectPreset({ html, text }) {
 
 function safeDehyphenate(text) {
   let output = text || "";
-  const regex = /([A-Za-zÀ-ÖØ-öø-ÿ]{2,})-\n([A-Za-zÀ-ÖØ-öø-ÿ]{2,})/g;
+  const regex = /([A-Za-zÀ-ÖØ-öø-ÿ]{2,})-\n([a-zà-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ]{1,})/g;
   const greekRegex = /[\u0370-\u03FF]/;
 
   for (let i = 0; i < 2; i += 1) {
@@ -610,8 +612,8 @@ function detectHeadings(line) {
   if (/^##?\s+/.test(trimmed)) {
     return { type: "h2", text: trimmed.replace(/^##?\s+/, "") };
   }
-  if (/^\d+\.\s+/.test(trimmed) || /^[IVX]+\.\s+/i.test(trimmed)) {
-    return { type: "h2", text: trimmed.replace(/^[IVX\d]+\.\s+/i, "") };
+  if (/^(?:\d+[.)]|\(\d+\))\s+/.test(trimmed) || /^[IVX]+\.\s+/i.test(trimmed)) {
+    return { type: "h2", text: trimmed.replace(/^(?:[IVX]+\.|\d+[.)]|\(\d+\))\s+/i, "") };
   }
   const isShort = trimmed.length <= 70;
   const isCaps = /[A-ZÀ-ÖØ-Þ]/.test(trimmed) && trimmed === trimmed.toUpperCase();
@@ -699,7 +701,7 @@ function markerToListType(marker) {
 
 function detectAndBuildLists(lines) {
   const blocks = [];
-  const listRegex = /^(\s*)([•\-–*]|\d+[.)]|[a-zA-Z][.)]|\([a-zA-Z]\))\s+(.*)$/;
+  const listRegex = /^(\s*)([•\-–*]|\d+[.)]|\(\d+\)|[a-zA-Z][.)]|\([a-zA-Z]\))\s+(.*)$/;
   let i = 0;
 
   while (i < lines.length) {
@@ -884,6 +886,26 @@ function renderBlocksToHTML(blocks) {
   const container = document.createElement("div");
   container.appendChild(renderBlocksToFragment(blocks));
   return container.innerHTML;
+}
+
+function blocksToHtml(blocks) {
+  return renderBlocksToHTML(blocks);
+}
+
+function normalizeSanitizedStructure(container) {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach((node) => {
+    if (node.tagName === "DIV") {
+      const p = document.createElement("p");
+      while (node.firstChild) p.appendChild(node.firstChild);
+      node.parentNode && node.parentNode.replaceChild(p, node);
+    }
+  });
+
+  wrapLooseTextNodes(container);
 }
 
 function applyNotebookLmSuperscripts(text) {
@@ -1424,7 +1446,7 @@ function applyHighlight(catId) {
 window.applyHighlight = applyHighlight;
 
 // Botões de highlight
-document.querySelectorAll(".hlBtn").forEach(btn => {
+hlButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     const catId = Number(btn.getAttribute("data-cat"));
     applyHighlight(catId);
@@ -1879,12 +1901,26 @@ editor.addEventListener("mouseup", captureSelectionIfInsideEditor);
 editor.addEventListener("keyup", captureSelectionIfInsideEditor);
 document.addEventListener("selectionchange", captureSelectionIfInsideEditor);
 
-document.querySelectorAll("button, label.toggle").forEach((el) => {
+[
+  "btnNew", "btnSave", "btnUndo", "btnRedo", "btnFocus", "btnNormalize", "btnReNormalize",
+  "btnNote", "btnSection", "btnAutoSections", "btnClean", "btnClearSearch", "btnToggleNotes",
+  "btnCollapseNotes", "btnExportTxt", "btnExportJson", "btnExportMd", "btnExportPdf", "btnExitFocus"
+].forEach((id) => {
+  const el = $(id);
+  if (!el) return;
   el.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     restoreSelection();
   });
 });
+
+const autoToggleLabel = toggleAutoNormalize ? toggleAutoNormalize.closest("label.toggle") : null;
+if (autoToggleLabel) {
+  autoToggleLabel.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    restoreSelection();
+  });
+}
 
 function escapeMarkdownText(text) {
   return (text || "").replace(/[\\`*_{}[\]()#+\-.!|]/g, "\\$&");
@@ -2110,6 +2146,8 @@ function setFocusMode(on) {
   const isFocus = !!on;
   document.body.classList.toggle("is-focus", isFocus);
   localStorage.setItem(`${STORAGE_KEY}_focus`, isFocus ? "1" : "0");
+  if (btnFocus) btnFocus.setAttribute("aria-pressed", isFocus ? "true" : "false");
+  if (btnExitFocus) btnExitFocus.setAttribute("aria-hidden", isFocus ? "false" : "true");
   setStatus(isFocus ? "Modo foco ativado." : "Modo foco desativado.");
   if (isFocus) {
     editor.focus();
