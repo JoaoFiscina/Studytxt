@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Firead</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/firead.png?v=1">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/firead.png?v=1">
@@ -32,6 +32,8 @@
           <button id="btnRedo" class="btn btn--ghost" title="Refazer (Ctrl+Y)">↷</button>
           <button id="btnFocus" class="btn">Foco</button>
         </div>
+        <button id="btnMobileMenu" class="btn btn--ghost mobileOnly" type="button" aria-label="Menu">☰</button>
+        <button id="btnMobileNotes" class="btn btn--ghost mobileOnly" type="button" aria-label="Notas">🗒</button>
       </div>
 
       <div class="topbar__center">
@@ -154,6 +156,35 @@
     <button id="btnExitFocus" class="focusExit" type="button" title="Sair do foco (Esc / Ctrl+Shift+F)">
       Sair do foco
     </button>
+
+    <div id="mobileOverlay" class="overlay" hidden></div>
+
+    <aside id="mobileDrawerTools" class="drawer drawer--right" aria-hidden="true">
+      <div class="drawer__header">
+        <div class="drawer__title">Menu</div>
+        <button id="btnCloseTools" class="btn btn--ghost" type="button" aria-label="Fechar">✕</button>
+      </div>
+      <div class="drawer__content" id="mobileToolsMount"></div>
+    </aside>
+
+    <aside id="mobileDrawerNotes" class="drawer drawer--right" aria-hidden="true">
+      <div class="drawer__header">
+        <div class="drawer__title">Notas</div>
+        <button id="btnCloseNotes" class="btn btn--ghost" type="button" aria-label="Fechar">✕</button>
+      </div>
+      <div class="drawer__content" id="mobileNotesMount"></div>
+    </aside>
+
+    <nav id="bottomBar" class="bottomBar mobileOnly" aria-label="Ações rápidas">
+      <button class="chip" data-hl="1" type="button">1</button>
+      <button class="chip" data-hl="2" type="button">2</button>
+      <button class="chip" data-hl="3" type="button">3</button>
+      <button class="chip" data-hl="4" type="button">4</button>
+      <button class="chip" data-hl="5" type="button">5</button>
+      <button id="btnMobileNote" class="btn btn--ghost" type="button">Nota</button>
+      <button id="btnMobileSection" class="btn btn--ghost" type="button">Seção</button>
+      <button id="btnMobileFocus" class="btn btn--ghost" type="button">Foco</button>
+    </nav>
   </div>
 
   <script src="app.js"></script>

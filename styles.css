@@ -137,6 +137,10 @@ body{
   padding: 8px 10px;
 }
 
+.btn, select, input, .chip{
+  min-height: 44px;
+}
+
 .hlBar{
   display: flex;
   gap: 6px;
@@ -606,6 +610,164 @@ body.is-focus{
   .topbar__center{ justify-content: flex-start; }
   .topbar__right{ justify-content: flex-start; }
   .toolbarDivider{ display: none; }
+}
+
+
+
+.overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  z-index: 9998;
+}
+
+.drawer{
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: min(92vw, 380px);
+  background: var(--panel);
+  z-index: 9999;
+  transform: translateX(110%);
+  transition: transform .18s ease;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  border-left: 1px solid var(--border);
+}
+
+.drawer--right{
+  right: 0;
+}
+
+.drawer.is-open{
+  transform: translateX(0);
+}
+
+.drawer__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer__title{
+  font-weight: 800;
+}
+
+.drawer__content{
+  padding: 12px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bottomBar{
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border-top: 1px solid var(--border);
+  display:flex;
+  gap: 8px;
+  align-items:center;
+  justify-content: center;
+  z-index: 9997;
+  flex-wrap: wrap;
+}
+
+.chip{
+  border:1px solid var(--border);
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 40px;
+  text-align:center;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mobileOnly{
+  display: none;
+}
+
+@media (max-width: 860px){
+  input, select{
+    font-size: 16px;
+  }
+
+  .mobileOnly{
+    display: inline-flex;
+  }
+
+  .topbar{
+    grid-template-columns: 1fr;
+  }
+
+  .topbar__left{
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .topbar__left .docTitle{
+    flex: 1 1 180px;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+  }
+
+  .topbar__left #groupDocActions{
+    display: inline-flex;
+    flex-wrap: wrap;
+  }
+
+  .topbar__left #groupDocActions #btnUndo,
+  .topbar__left #groupDocActions #btnRedo{
+    display: none;
+  }
+
+  .topbar__center,
+  .topbar__right{
+    display: none !important;
+  }
+
+  .main{
+    grid-template-columns: 1fr;
+    padding: 12px !important;
+    padding-bottom: 120px !important;
+  }
+
+  .paper{
+    max-width: 100% !important;
+    padding: 14px !important;
+    padding-bottom: 120px !important;
+  }
+
+  .notesPanel{
+    width: 100%;
+    max-height: none;
+    position: relative;
+    top: 0;
+  }
+
+  .editor{
+    overflow-x: hidden;
+  }
+
+  .editor table{
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .editor img{
+    max-width: 100%;
+    height: auto;
+  }
 }
 
 @media print{
