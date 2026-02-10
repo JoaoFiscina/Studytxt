@@ -54,6 +54,19 @@
             <option value="lines">Texto + quebras</option>
           </select>
         </div>
+        <div class="toolbarGroup" aria-label="Normalização">
+          <select id="normalizePreset" class="select">
+            <option value="auto">Auto</option>
+            <option value="pdf">PDF</option>
+            <option value="site">Site/Artigo</option>
+            <option value="chatgpt">ChatGPT</option>
+            <option value="gemini">Gemini</option>
+            <option value="notebooklm">NotebookLM</option>
+          </select>
+          <button id="btnNormalize" class="btn">Normalizar</button>
+          <label class="toggle"><input id="toggleAutoNormalize" type="checkbox" /> Auto ao colar</label>
+          <button id="btnReNormalize" class="btn btn--ghost" title="Reaplicar usando o texto/HTML original do último paste">Re-normalizar</button>
+        </div>
         <div class="fontPicker">
           <label for="fontSelect" class="fontPicker__label">Fonte:</label>
           <select id="fontSelect" class="select">
