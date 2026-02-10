@@ -396,28 +396,7 @@ function esc(value) {
     .replace(/>/g, "&gt;");
 }
 
-function blocksToHtml(blocks) {
-  return (blocks || []).map((block) => {
-    if (!block || !block.type) return "";
-    if (block.type === "hr") return "<hr>";
-    if (block.type === "h2" || block.type === "h3" || block.type === "p" || block.type === "blockquote") {
-      const text = esc((block.text || "").replace(/\s+/g, " ").trim());
-      if (!text) return "";
-      return `<${block.type}>${text}</${block.type}>`;
-    }
-    if (block.type === "pre") {
-      const text = esc(block.text || "");
-      if (!text.trim()) return "";
-      return `<pre>${text}</pre>`;
-    }
-    if (block.type === "ul" || block.type === "ol") {
-      const items = (block.items || []).map((item) => esc(String(item || "").replace(/\s+/g, " ").trim())).filter(Boolean);
-      if (!items.length) return "";
-      return `<${block.type}>${items.map((item) => `<li>${item}</li>`).join("")}</${block.type}>`;
-    }
-    return "";
-  }).filter(Boolean).join("");
-}
+
 
 function isListLine(line) {
   return /^(?:[•\-*–—]\s+|\d+[.)]\s+|\(\d+\)\s+|[a-zA-Z][.)]\s+|\([a-zA-Z]\)\s+)/.test((line || "").trim());
@@ -529,45 +508,266 @@ function linesToStandardBlocks(lines, { enableHeadings = true } = {}) {
   return blocks;
 }
 
+
+function softSplitParagraph(text) {
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return [];
+  if (clean.length <= 600 || /[.;:?!]/.test(clean)) return [clean];
+  const parts = clean.split(/(?<=[.;!?])\s+/).filter(Boolean);
+  if (parts.length <= 1) return [clean];
+  const out = [];
+  let buf = [];
+  parts.forEach((part) => {
+    buf.push(part);
+    if (buf.length >= 3) {
+      out.push(buf.join(" "));
+      buf = [];
+    }
+  });
+  if (buf.length) out.push(buf.join(" "));
+  return out;
+}
+
+function applyInlineFormatting(text) {
+  let html = escapeHTML(text || "");
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/(^|[^*])\*(?!\s)([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  return sanitizeInlineHtml(html);
+}
+
+function textToBlocks(text, preset) {
+  const mode = preset || "site";
+  const isPdf = mode === "pdf";
+  let normalized = commonPreNormalize(text || "", { dehyphenate: isPdf });
+  if (isPdf) normalized = joinWrappedLines(normalized);
+  const lines = normalized.split("\n").map((line) => line.replace(/\s+$/g, ""));
+  const blocks = [];
+  let i = 0;
+
+  const flushParagraph = (buffer) => {
+    const joined = joinParagraphLines(buffer).trim();
+    if (!joined) return;
+    softSplitParagraph(joined).forEach((part) => {
+      blocks.push({ type: "p", html: applyInlineFormatting(part) });
+    });
+  };
+
+  while (i < lines.length) {
+    const raw = lines[i] || "";
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+
+    const md2 = trimmed.match(/^#{1,2}\s+(.+)/);
+    if (md2) { blocks.push({ type: "h2", text: md2[1].trim() }); i += 1; continue; }
+    const md3 = trimmed.match(/^#{3,4}\s+(.+)/);
+    if (md3) { blocks.push({ type: "h3", text: md3[1].trim() }); i += 1; continue; }
+    if (/^\d+\.\d+\s+.+/.test(trimmed)) { blocks.push({ type: "h3", text: trimmed.replace(/^\d+\.\d+\s+/, "") }); i += 1; continue; }
+    if (/^\d+\.\s+.+/.test(trimmed)) { blocks.push({ type: "h2", text: trimmed.replace(/^\d+\.\s+/, "") }); i += 1; continue; }
+    if (trimmed.length <= 90 && /:$/.test(trimmed)) {
+      blocks.push({ type: /^\d/.test(trimmed) ? "h2" : "h3", text: trimmed.replace(/:\s*$/, "") });
+      i += 1;
+      continue;
+    }
+    if (trimmed.length >= 8 && !/[a-zà-öø-ÿ]/.test(trimmed) && /[A-ZÀ-Ú]/.test(trimmed)) {
+      blocks.push({ type: "h2", text: trimmed });
+      i += 1;
+      continue;
+    }
+
+    const listMatch = trimmed.match(/^\s*([-*•–—]|\d+[\.)]|[a-zA-Z][\.)])\s+(.+)/);
+    if (listMatch) {
+      const ordered = /^(\d+[\.)]|[a-zA-Z][\.)])$/.test(listMatch[1]);
+      const listType = ordered ? "ol" : "ul";
+      const items = [listMatch[2].trim()];
+      i += 1;
+      while (i < lines.length) {
+        const line = lines[i] || "";
+        const t = line.trim();
+        if (!t) break;
+        const next = t.match(/^\s*([-*•–—]|\d+[\.)]|[a-zA-Z][\.)])\s+(.+)/);
+        if (next) {
+          const nextOrdered = /^(\d+[\.)]|[a-zA-Z][\.)])$/.test(next[1]);
+          if ((nextOrdered ? "ol" : "ul") !== listType) break;
+          items.push(next[2].trim());
+          i += 1;
+          continue;
+        }
+        if (/^\s{2,}\S/.test(line) && items.length) {
+          items[items.length - 1] = `${items[items.length - 1]} ${t}`;
+          i += 1;
+          continue;
+        }
+        break;
+      }
+      blocks.push({ type: listType, items: items.map((item) => applyInlineFormatting(item)) });
+      continue;
+    }
+
+    const paragraph = [trimmed];
+    i += 1;
+    while (i < lines.length) {
+      const peek = (lines[i] || "").trim();
+      if (!peek) break;
+      if (/^#{1,4}\s+/.test(peek) || /^\d+\.\s+/.test(peek) || /^\d+\.\d+\s+/.test(peek)) break;
+      if (/^\s*([-*•–—]|\d+[\.)]|[a-zA-Z][\.)])\s+/.test(peek)) break;
+      paragraph.push(peek);
+      i += 1;
+    }
+    flushParagraph(paragraph);
+  }
+
+  if (mode === "notebooklm") {
+    const refsIdx = blocks.findIndex((block) => block.type === "h2" && /^(sources|citations)$/i.test((block.text || "").trim()));
+    if (refsIdx >= 0) {
+      const refs = [];
+      for (let j = refsIdx + 1; j < blocks.length; j += 1) {
+        const b = blocks[j];
+        if (b.type === "p") refs.push((b.html || "").replace(/<[^>]+>/g, "").trim());
+      }
+      blocks.splice(refsIdx);
+      if (refs.length) {
+        blocks.push({ type: "h2", text: "Referências" });
+        blocks.push({ type: "ul", items: refs.map((ref) => applyInlineFormatting(ref)) });
+      }
+    }
+  }
+
+  return blocks;
+}
+
+function htmlToBlocks(html, opts = {}) {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+  const root = template.content;
+
+  root.querySelectorAll("script,style,iframe,form,svg").forEach((el) => el.remove());
+  Array.from(root.querySelectorAll("*")).forEach((el) => {
+    Array.from(el.attributes).forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith("on") || name === "style" || name === "class") {
+        el.removeAttribute(attr.name);
+      }
+    });
+
+    if (el.tagName === "A") {
+      const href = (el.getAttribute("href") || "").trim();
+      if (!/^https?:\/\//i.test(href)) {
+        const parent = el.parentNode;
+        if (parent) {
+          while (el.firstChild) parent.insertBefore(el.firstChild, el);
+          el.remove();
+        }
+      } else {
+        el.setAttribute("href", href);
+        el.setAttribute("target", "_blank");
+        el.setAttribute("rel", "noreferrer");
+      }
+    }
+
+    if (el.tagName === "IMG") {
+      const src = (el.getAttribute("src") || "").trim();
+      if (!isSafeImgSrc(src)) el.remove();
+    }
+  });
+
+  root.querySelectorAll("h1").forEach((el) => {
+    const h2 = document.createElement("h2");
+    h2.innerHTML = el.innerHTML;
+    el.replaceWith(h2);
+  });
+  root.querySelectorAll("h4,h5,h6").forEach((el) => {
+    const h3 = document.createElement("h3");
+    h3.innerHTML = el.innerHTML;
+    el.replaceWith(h3);
+  });
+  root.querySelectorAll("div").forEach((el) => {
+    if (el.closest("li,td,th,pre,code,blockquote")) return;
+    const p = document.createElement("p");
+    p.innerHTML = el.innerHTML;
+    el.replaceWith(p);
+  });
+
+  const blocks = [];
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+      if (text) blocks.push({ type: "p", html: applyInlineFormatting(text) });
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName.toLowerCase();
+
+    if (tag === "h2" || tag === "h3") {
+      const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+      if (text) blocks.push({ type: tag, text });
+      return;
+    }
+    if (tag === "p") {
+      const htmlInline = sanitizeInlineHtml(node.innerHTML.replace(/<br\s*\/?>/gi, " "));
+      if (htmlInline) blocks.push({ type: "p", html: htmlInline });
+      return;
+    }
+    if (tag === "ul" || tag === "ol") {
+      const items = Array.from(node.children)
+        .filter((li) => li.tagName === "LI")
+        .map((li) => sanitizeInlineHtml(li.innerHTML.replace(/<br\s*\/?>/gi, " ")))
+        .filter(Boolean);
+      if (items.length) blocks.push({ type: tag, items });
+      return;
+    }
+    if (tag === "table") {
+      blocks.push({ type: "table", html: cleanTableHtml(node) });
+      return;
+    }
+    if (tag === "blockquote") {
+      const htmlInline = sanitizeInlineHtml(node.innerHTML.replace(/<br\s*\/?>/gi, " "));
+      if (htmlInline) blocks.push({ type: "blockquote", html: htmlInline });
+      return;
+    }
+    if (tag === "pre" || tag === "code") {
+      const text = node.innerText || node.textContent || "";
+      if (text.trim()) blocks.push({ type: "pre", text });
+      return;
+    }
+    if (tag === "hr") {
+      blocks.push({ type: "hr" });
+      return;
+    }
+    if (tag === "img") {
+      const src = node.getAttribute("src") || "";
+      if (isSafeImgSrc(src)) {
+        blocks.push({ type: "img", src, alt: node.getAttribute("alt") || "" });
+      }
+      return;
+    }
+
+    Array.from(node.childNodes).forEach(walk);
+  };
+
+  Array.from(root.childNodes).forEach(walk);
+  return blocks;
+}
+
 function detectPreset({ html, text }) {
   const plain = (text || "").trim();
-  const lower = plain.toLowerCase();
   const htmlValue = html || "";
 
-  const hasCitations = /\[\d+\]/.test(plain);
-  const notebookSignals = [/(?:^|\n)\s*(sources|citations|source\s+\d+)\b/i, /key takeaways?/i, /\bsource\s*1\b/i];
-  if (hasCitations && notebookSignals.some((re) => re.test(plain))) {
-    return "notebooklm";
-  }
-
-  if (/^###\s+/m.test(plain) || /^\*\*.+?\*\*:\s+/m.test(plain)) {
-    return "gemini";
-  }
-
-  const hasGeminiLabels = (plain.match(/\*\*.+?\*\*:\s+/g) || []).length >= 2
-    || (plain.match(/\b(resposta|conclusão):/gi) || []).length >= 2;
-  if (hasGeminiLabels) return "gemini";
-
-  const numberedItems = (plain.match(/^\d+[.)]\s+/gm) || []).length;
-  if (numberedItems >= 3 && /(?:^|\n)\d+[.)]\s+/.test(plain) && !/^#{1,3}\s+/m.test(plain)) {
-    return "chatgpt";
-  }
+  if (isUsefulHtml(htmlValue)) return "site";
+  if (/(^|\n)\s*(sources|citations)\b/i.test(plain)) return "notebooklm";
+  if (/^(?:.|\n)*(#{1,4}\s|\*\*[^*]+\*\*|`[^`]+`)/m.test(plain)) return "gemini";
 
   const lineBreaks = (plain.match(/\n/g) || []).length;
   const lines = plain.split("\n").filter(Boolean);
-  const shortLines = lines.filter(line => line.trim().length > 0 && line.trim().length <= 60).length;
-  const avgShortRatio = lines.length ? shortLines / lines.length : 0;
-  const hyphenBreaks = (plain.match(/-\s*\n[a-zà-öø-ÿ]/g) || []).length;
-  if (lineBreaks >= 8 && avgShortRatio >= 0.55 && hyphenBreaks >= 1) {
-    return "pdf";
-  }
+  const shortLines = lines.filter((line) => line.trim().length > 0 && line.trim().length <= 60).length;
+  const hyphenBreaks = (plain.match(/-\n[\p{Ll}]/gu) || []).length;
+  if (lineBreaks >= 8 && hyphenBreaks >= 1 && (lines.length ? shortLines / lines.length : 0) >= 0.55) return "pdf";
 
-  const hasStructuredTags = /<(ul|ol|table|h[1-4])\b/i.test(htmlValue);
-  const divSpanCount = (htmlValue.match(/<(div|span)\b/gi) || []).length;
-  if (htmlValue && (hasStructuredTags || divSpanCount >= 4)) {
-    return "site";
-  }
-
+  if ((plain.match(/^\d+[.)]?\s+/gm) || []).length >= 2) return "chatgpt";
   return "site";
 }
 
@@ -880,8 +1080,124 @@ function renderBlocksToHTML(blocks) {
   return container.innerHTML;
 }
 
+function sanitizeInlineHtml(rawHtml) {
+  const template = document.createElement("template");
+  template.innerHTML = rawHtml || "";
+  const allowed = new Set(["STRONG", "EM", "CODE", "A"]);
+
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach((node) => {
+    const tag = node.tagName;
+    if (tag === "BR") {
+      node.replaceWith(document.createTextNode(" "));
+      return;
+    }
+
+    if (!allowed.has(tag)) {
+      const parent = node.parentNode;
+      if (!parent) return;
+      while (node.firstChild) parent.insertBefore(node.firstChild, node);
+      node.remove();
+      return;
+    }
+
+    const href = tag === "A" ? (node.getAttribute("href") || "").trim() : "";
+    Array.from(node.attributes).forEach((attr) => node.removeAttribute(attr.name));
+    if (tag === "A") {
+      if (!/^https?:\/\//i.test(href)) {
+        const parent = node.parentNode;
+        if (!parent) return;
+        while (node.firstChild) parent.insertBefore(node.firstChild, node);
+        node.remove();
+        return;
+      }
+      node.setAttribute("href", href);
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noreferrer");
+    }
+  });
+
+  const text = template.content.textContent || "";
+  if (!text.trim()) return "";
+  return template.innerHTML.replace(/\s+/g, " ").trim();
+}
+
+function cleanTableHtml(table) {
+  const safeTable = document.createElement("table");
+  const allowed = new Set(["TABLE", "THEAD", "TBODY", "TR", "TH", "TD"]);
+
+  const normalizeCell = (cell) => {
+    const walk = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+      if (node.nodeType !== Node.ELEMENT_NODE) return "";
+      if (node.tagName === "BR") return "\n";
+      return Array.from(node.childNodes).map(walk).join("");
+    };
+    return walk(cell).replace(/\u00A0/g, " ").replace(/[ \t]+\n/g, "\n").trim();
+  };
+
+  const cloneTree = (src, destParent) => {
+    Array.from(src.children || []).forEach((child) => {
+      if (!allowed.has(child.tagName)) {
+        cloneTree(child, destParent);
+        return;
+      }
+      const el = document.createElement(child.tagName.toLowerCase());
+      if (child.tagName === "TH" || child.tagName === "TD") {
+        const colspan = child.getAttribute("colspan");
+        const rowspan = child.getAttribute("rowspan");
+        if (colspan) el.setAttribute("colspan", colspan);
+        if (rowspan) el.setAttribute("rowspan", rowspan);
+        el.textContent = normalizeCell(child);
+      } else {
+        cloneTree(child, el);
+      }
+      destParent.appendChild(el);
+    });
+  };
+
+  cloneTree(table, safeTable);
+  return safeTable.outerHTML;
+}
+
+function isUsefulHtml(html) {
+  return /<(p|div|ul|ol|li|table|h1|h2|h3|h4|br|blockquote|pre|code|img)\b/i.test(html || "");
+}
+
 function blocksToHtml(blocks) {
-  return renderBlocksToHTML(blocks);
+  return (blocks || []).map((block) => {
+    if (!block || !block.type) return "";
+    if (block.type === "hr") return "<hr>";
+    if (block.type === "h2" || block.type === "h3") {
+      const text = esc((block.text || "").replace(/\s+/g, " ").trim());
+      return text ? `<${block.type}>${text}</${block.type}>` : "";
+    }
+    if (block.type === "p" || block.type === "blockquote") {
+      const html = sanitizeInlineHtml(block.html || esc(block.text || ""));
+      return html ? `<${block.type}>${html}</${block.type}>` : "";
+    }
+    if (block.type === "pre") {
+      const text = esc(block.text || "");
+      return text.trim() ? `<pre><code>${text}</code></pre>` : "";
+    }
+    if (block.type === "ul" || block.type === "ol") {
+      const items = (block.items || [])
+        .map((item) => sanitizeInlineHtml(typeof item === "string" ? esc(item) : (item && (item.html || esc(item.text || "")))))
+        .filter(Boolean);
+      return items.length ? `<${block.type}>${items.map((item) => `<li>${item}</li>`).join("")}</${block.type}>` : "";
+    }
+    if (block.type === "table") return block.html || "";
+    if (block.type === "img") {
+      const src = (block.src || "").trim();
+      if (!isSafeImgSrc(src)) return "";
+      const alt = esc(block.alt || "");
+      return `<img src="${escapeHTML(src)}" alt="${alt}">`;
+    }
+    return "";
+  }).filter(Boolean).join("\n");
 }
 
 function normalizeSanitizedStructure(container) {
@@ -931,113 +1247,48 @@ function dedupeSequentialHeadings(blocks) {
 }
 
 function pdfNormalizeToBlocks(text) {
-  const normalized = commonPreNormalize(text, { dehyphenate: true });
-  const joined = joinWrappedLines(normalized);
-  const lines = joined.split("\n").map((line) => line.replace(/\s+$/g, ""));
-  return linesToStandardBlocks(lines, { enableHeadings: true });
+  return textToBlocks(text || "", "pdf");
 }
 
 function chatgptNormalizeToBlocks(text) {
-  const normalized = commonPreNormalize(text, { dehyphenate: false });
-  const lines = normalized.split("\n").map((line) => line.trimEnd());
-  const blocks = dedupeSequentialHeadings(linesToStandardBlocks(lines, { enableHeadings: true }));
-  return blocks.filter((block) => !(block.type === "p" && !(block.text || "").trim()));
+  return textToBlocks(text || "", "chatgpt");
 }
 
 function geminiNormalizeToBlocks(text) {
-  const normalized = commonPreNormalize(text, { dehyphenate: false });
-  const lines = normalized.split("\n").map((line) => line.trimEnd());
-  const mapped = [];
-
-  for (const rawLine of lines) {
-    const trimmed = (rawLine || "").trim();
-    if (!trimmed) {
-      mapped.push("");
-      continue;
-    }
-
-    if (/^#{2,4}\s+/.test(trimmed)) {
-      const clean = trimmed.replace(/^#{2,4}\s+/, "").trim();
-      const level = (trimmed.match(/^#+/) || [""])[0].length;
-      mapped.push(level >= 3 ? `### ${clean}` : `## ${clean}`);
-      continue;
-    }
-
-    const strongLine = trimmed.match(/^\*\*(.+?)\*\*:\s*(.*)$/);
-    if (strongLine) {
-      mapped.push(`${strongLine[1]}: ${strongLine[2]}`.trim());
-      continue;
-    }
-
-    mapped.push(trimmed);
-  }
-
-  return linesToStandardBlocks(mapped, { enableHeadings: true });
+  return textToBlocks(text || "", "gemini");
 }
 
 function notebooklmNormalizeToBlocks(text) {
-  const normalized = commonPreNormalize(text, { dehyphenate: false });
-  const lines = normalized.split("\n").map((line) => line.trimEnd());
-  const sourceIndex = lines.findIndex((line) => /^(sources|citations)\b/i.test((line || "").trim()));
-
-  if (sourceIndex === -1) {
-    return linesToStandardBlocks(lines, { enableHeadings: true });
-  }
-
-  const before = lines.slice(0, sourceIndex);
-  const after = lines.slice(sourceIndex + 1)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.replace(/^[-•*]\s+/, ""));
-
-  const blocks = linesToStandardBlocks(before, { enableHeadings: true });
-  if (after.length) {
-    blocks.push({ type: "hr" });
-    blocks.push({ type: "h2", text: "Referências" });
-    blocks.push({ type: "ul", items: after });
-  }
-  return blocks;
-}
-
-function pdfNormalize(text) {
-  return blocksToHtml(pdfNormalizeToBlocks(text));
-}
-
-function siteNormalize(html, text) {
-  if (html) {
-    const fragment = sanitizeHTMLToFragment(html);
-    const wrapper = document.createElement("div");
-    wrapper.appendChild(fragment);
-    normalizeFragmentStructure(wrapper);
-    const asText = wrapper.innerText || text || "";
-    return blocksToHtml(linesToStandardBlocks(asText.replace(/\r\n/g, "\n").split("\n"), { enableHeadings: true }));
-  }
-  return blocksToHtml(pdfNormalizeToBlocks(text));
+  return textToBlocks(text || "", "notebooklm");
 }
 
 function normalizeFromRaw({ preset, raw }) {
-  if (!raw) return { htmlOut: "", meta: { preset: "site" } };
+  if (!raw) return { htmlOut: "", meta: { preset: "site", source: "text", counts: {} } };
+
   let chosenPreset = preset || "auto";
-  if (chosenPreset === "auto") {
-    chosenPreset = raw.detected || detectPreset(raw);
-  }
+  if (chosenPreset === "auto") chosenPreset = raw.detected || detectPreset(raw);
 
+  const useHtmlPipeline = isUsefulHtml(raw.html || "");
   let blocks = [];
-  if (chosenPreset === "pdf") {
-    blocks = pdfNormalizeToBlocks(raw.text || "");
-  } else if (chosenPreset === "chatgpt") {
-    blocks = chatgptNormalizeToBlocks(raw.text || "");
-  } else if (chosenPreset === "gemini") {
-    blocks = geminiNormalizeToBlocks(raw.text || "");
-  } else if (chosenPreset === "notebooklm") {
-    blocks = notebooklmNormalizeToBlocks(raw.text || "");
-  } else if (chosenPreset === "site") {
-    return { htmlOut: siteNormalize(raw.html || "", raw.text || ""), meta: { preset: chosenPreset } };
+  if (useHtmlPipeline) {
+    blocks = htmlToBlocks(raw.html || "", { preset: chosenPreset });
   } else {
-    blocks = pdfNormalizeToBlocks(raw.text || "");
+    blocks = textToBlocks(raw.text || "", chosenPreset);
   }
 
-  return { htmlOut: blocksToHtml(blocks), meta: { preset: chosenPreset } };
+  const counts = blocks.reduce((acc, b) => {
+    acc[b.type] = (acc[b.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    htmlOut: blocksToHtml(blocks),
+    meta: {
+      preset: chosenPreset,
+      source: useHtmlPipeline ? "html" : "text",
+      counts,
+    },
+  };
 }
 
 function hasNormalizationRisk() {
@@ -1329,61 +1580,48 @@ function scheduleHistoryPush(reason) {
 
 // ---------- Paste handling ----------
 editor.addEventListener("paste", (e) => {
-  e.preventDefault();
   const range = getSelectionRange();
   if (!range) return;
 
   const clipboard = e.clipboardData || window.clipboardData;
-  const html = clipboard.getData("text/html");
-  const text = clipboard.getData("text/plain");
+  const html = clipboard.getData("text/html") || "";
+  const text = clipboard.getData("text/plain") || "";
   const detected = detectPreset({ html, text });
   setLastRaw({ html, text, detected });
 
   const selectedPreset = normalizePreset ? normalizePreset.value : "auto";
-  const shouldAutoNormalize = toggleAutoNormalize && toggleAutoNormalize.checked;
+  const shouldAutoNormalize = Boolean(toggleAutoNormalize && toggleAutoNormalize.checked);
+  const shouldUsePipeline = shouldAutoNormalize || pasteMode !== "plain" || isUsefulHtml(html);
+
+  if (!shouldUsePipeline) return;
+  e.preventDefault();
 
   if (shouldAutoNormalize) {
     if (!confirmNormalization()) return;
-    const { htmlOut, meta } = normalizeFromRaw({
-      preset: selectedPreset,
-      raw: lastRaw,
-    });
+    const { htmlOut, meta } = normalizeFromRaw({ preset: selectedPreset, raw: lastRaw });
     editor.innerHTML = htmlOut;
-    scheduleAutosave(`Normalizado (${meta.preset}).`);
+    scheduleAutosave(`Normalizado (${meta.preset}/${meta.source}).`);
     pushHistory("normalize");
     return;
   }
 
-  if (pasteMode === "html" && html) {
-    const fragment = sanitizeHTMLToFragment(html);
-    const wrapper = document.createElement("div");
-    wrapper.appendChild(fragment);
-    normalizeFragmentStructure(wrapper);
-    const blocks = linesToStandardBlocks((wrapper.innerText || "").replace(/\r\n/g, "\n").split("\n"), { enableHeadings: true });
-    const frag = buildFragmentFromBlocks(blocks);
-    insertFragmentAtRange(frag, range);
-    scheduleAutosave("Colado com formatação.");
+  if (pasteMode === "html" && isUsefulHtml(html)) {
+    const blocks = htmlToBlocks(html, { preset: selectedPreset });
+    insertFragmentAtRange(buildFragmentFromBlocks(blocks), range);
+    scheduleAutosave("Colado com pipeline HTML.");
     pushHistory("paste");
     return;
   }
 
-  if (pasteMode === "lines") {
-    const blocks = normalizePastedTextLines(text);
-    const frag = buildFragmentFromBlocks(blocks);
-    insertFragmentAtRange(frag, range);
-    scheduleAutosave("Colado com quebras.");
-    pushHistory("paste");
-    return;
-  }
-
-  const blocks = normalizePastedTextSmart(text);
-  const frag = buildFragmentFromBlocks(blocks);
-  insertFragmentAtRange(frag, range);
-  scheduleAutosave("Colado e formatado.");
+  const fallbackPreset = selectedPreset === "auto" ? detected : selectedPreset;
+  const blocks = textToBlocks(text, fallbackPreset);
+  insertFragmentAtRange(buildFragmentFromBlocks(blocks), range);
+  scheduleAutosave("Colado com pipeline de texto.");
   pushHistory("paste");
 });
 
 // ---------- Highlights ----------
+
 function wrapRangeWithElement(range, el) {
   const contents = range.extractContents();
   el.appendChild(contents);
